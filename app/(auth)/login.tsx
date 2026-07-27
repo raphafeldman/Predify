@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../../lib/auth-context';
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, blockedMessage } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +37,8 @@ export default function LoginScreen() {
     >
       <Text style={styles.title}>Gestão do Condomínio</Text>
       <Text style={styles.subtitle}>Entre com sua conta</Text>
+
+      {blockedMessage ? <Text style={styles.blocked}>{blockedMessage}</Text> : null}
 
       <View style={styles.form}>
         <Text style={styles.label}>E-mail</Text>
@@ -117,6 +119,15 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     marginTop: 10,
     fontSize: 13,
+  },
+  blocked: {
+    color: '#DC2626',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   button: {
     backgroundColor: '#1F6FEB',

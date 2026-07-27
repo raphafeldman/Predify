@@ -42,7 +42,10 @@ Ainda não existe cadastro pelo próprio app (por segurança, só o síndico cri
 
 Para um funcionário, use `"role": "funcionario"` (ou simplesmente não inclua o campo `role`, que o padrão já é funcionário).
 
-Repita para cada funcionário do prédio.
+Repita para cada funcionário do prédio. Depois de criada, cada conta pode ser
+editada (nome, telefone, papel) ou bloqueada direto pelo app, na tela
+**Equipe** (só o síndico vê essa tela) — não precisa voltar ao Supabase pra
+isso.
 
 ## 5. Rodar o app no celular
 
@@ -56,7 +59,21 @@ npm start
 3. Um QR code vai aparecer no terminal. Abra o Expo Go no celular e escaneie (Android: opção de escanear dentro do próprio app; iOS: pela câmera nativa).
 4. O app deve abrir e mostrar a tela de login. Entre com um dos usuários criados no passo 4.
 
+## 6. Rodar a versão web (pelo computador)
+
+```bash
+npm run web
+```
+
+Abre no navegador (geralmente `http://localhost:8081`). É o mesmo app, mesmo
+login, mesmos dados — só que com um menu lateral em vez de abas embaixo,
+melhor pra usar em tela grande. As telas **Histórico** e **Equipe** só
+aparecem no menu lateral do síndico.
+
 ## Observações importantes
 
+- **Depois de atualizações no app**: sempre que o `supabase/schema.sql` mudar,
+  colar o arquivo inteiro de novo no SQL Editor e rodar — é seguro rodar
+  quantas vezes quiser, ele só adiciona o que ainda não existe.
 - **Notificação push no Android**: dentro do Expo Go, notificações push só funcionam no iOS. No Android, elas só funcionam depois de gerar uma versão "development build" do app (um passo posterior, quando quiser ir além dos testes iniciais). No iOS, funciona normalmente pelo Expo Go.
 - **Node.js**: este computador não tinha Node.js instalado e a instalação padrão foi bloqueada, então foi usada uma versão "portable" (sem instalador) salva em `%LOCALAPPDATA%\nodejs-portable`. Se abrir um novo terminal e os comandos `node`/`npm` não forem reconhecidos, feche e reabra o terminal (o PATH já foi salvo permanentemente para o seu usuário).

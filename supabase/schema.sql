@@ -378,3 +378,69 @@ drop trigger if exists on_occurrence_created on public.occurrences;
 create trigger on_occurrence_created
   after insert on public.occurrences
   for each row execute function public.notify_sindico_on_occurrence();
+
+-- ============================================================
+-- Migração: rotina com foto/observação por item
+-- ============================================================
+alter table public.checklist_entries add column if not exists notes text;
+alter table public.checklist_entries add column if not exists photo_urls text[] not null default '{}';
+
+-- ============================================================
+-- Migração: documentos passam a aceitar qualquer tipo de arquivo
+-- (não só foto) — renomeia photo_url -> file_url e adiciona metadados
+-- ============================================================
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'documents' and column_name = 'photo_url'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'documents' and column_name = 'file_url'
+  ) then
+    alter table public.documents rename column photo_url to file_url;
+  end if;
+end $$;
+
+alter table public.documents add column if not exists file_name text;
+alter table public.documents add column if not exists mime_type text not null default 'image/jpeg';
+
+-- ============================================================
+-- Migração: agendamento de tarefas (síndico atribui a um funcionário
+-- com data). "assigned_to" já existia no schema original.
+-- ============================================================
+alter table public.tasks add column if not exists scheduled_for date;
+
+-- ============================================================
+-- Migração: bloqueio de usuários pelo síndico
+-- ============================================================
+alter table public.profiles add column if not exists active boolean not null default true;
+
+-- Corrige uma brecha do schema original: a política antiga deixava
+-- qualquer usuário alterar sua própria coluna "role". Agora só o síndico
+-- pode mudar role/active de alguém (inclusive de si mesmo); cada um
+-- continua podendo editar seu próprio nome/telefone/avatar livremente.
+create or replace function public.protect_profile_privileged_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_sindico()
+    and (new.role is distinct from old.role or new.active is distinct from old.active)
+  then
+    raise exception 'Apenas o síndico pode alterar papel ou status de um usuário.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_privileged_fields on public.profiles;
+create trigger protect_profile_privileged_fields
+  before update on public.profiles
+  for each row execute function public.protect_profile_privileged_fields();
+
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own" on public.profiles
+  for update to authenticated using (id = auth.uid() or public.is_sindico());

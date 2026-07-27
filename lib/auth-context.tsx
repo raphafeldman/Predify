@@ -7,6 +7,7 @@ interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  blockedMessage: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -17,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -46,14 +48,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', session.user.id)
       .single()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (cancelled) return;
         if (error) {
           console.error('Erro ao carregar perfil:', error.message);
           setProfile(null);
-        } else {
-          setProfile(data as Profile);
+          setLoading(false);
+          return;
         }
+
+        const loadedProfile = data as Profile;
+        if (!loadedProfile.active) {
+          setBlockedMessage('Sua conta foi bloqueada pelo síndico. Fale com ele para mais informações.');
+          await supabase.auth.signOut();
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        setProfile(loadedProfile);
         setLoading(false);
       });
 
@@ -63,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   async function signIn(email: string, password: string) {
+    setBlockedMessage(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error ? traduzErro(error.message) : null };
   }
@@ -72,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, blockedMessage, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

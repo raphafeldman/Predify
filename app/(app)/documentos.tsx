@@ -9,17 +9,19 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
+import { FilePicker, type PickedFile } from '../../components/FilePicker';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
 import { useAuth } from '../../lib/auth-context';
-import { uploadPhoto } from '../../lib/storage';
+import { uploadFile, uploadPhoto } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
-import type { DocumentPhoto } from '../../lib/types';
+import type { DocumentItem } from '../../lib/types';
 
 const CATEGORIES = ['Contrato', 'Nota fiscal', 'Ata de reunião', 'Comprovante', 'Outro'];
 
 export default function DocumentosScreen() {
-  const [documents, setDocuments] = useState<DocumentPhoto[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -28,7 +30,7 @@ export default function DocumentosScreen() {
       .from('documents')
       .select('*')
       .order('created_at', { ascending: false });
-    if (data) setDocuments(data as DocumentPhoto[]);
+    if (data) setDocuments(data as DocumentItem[]);
     setLoading(false);
   }, []);
 
@@ -45,7 +47,7 @@ export default function DocumentosScreen() {
         refreshing={loading}
         onRefresh={load}
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Nenhum documento fotografado ainda.</Text> : null
+          !loading ? <Text style={styles.empty}>Nenhum documento adicionado ainda.</Text> : null
         }
         renderItem={({ item }) => (
           <RecordCard
@@ -53,9 +55,16 @@ export default function DocumentosScreen() {
             recordId={item.id}
             title={item.title}
             subtitle={`${item.category} • ${new Date(item.created_at).toLocaleDateString('pt-BR')}`}
-            photoPaths={[item.photo_url]}
           >
             {item.notes ? <Text style={styles.notes}>{item.notes}</Text> : null}
+            <View style={styles.attachmentWrapper}>
+              <AttachmentPreview
+                path={item.file_url}
+                mimeType={item.mime_type}
+                fileName={item.file_name}
+                style={styles.attachmentImage}
+              />
+            </View>
           </RecordCard>
         )}
       />
@@ -76,6 +85,8 @@ export default function DocumentosScreen() {
   );
 }
 
+type AttachmentMode = 'foto' | 'arquivo';
+
 function NewDocumentModal({
   visible,
   onClose,
@@ -89,7 +100,9 @@ function NewDocumentModal({
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [notes, setNotes] = useState('');
+  const [mode, setMode] = useState<AttachmentMode>('foto');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,24 +110,55 @@ function NewDocumentModal({
     setTitle('');
     setCategory(CATEGORIES[0]);
     setNotes('');
+    setMode('foto');
     setPhotos([]);
+    setPickedFile(null);
     setError(null);
   }
 
   async function submit() {
     if (!session) return;
-    if (!title.trim() || photos.length === 0) {
-      setError('Dê um título e tire ao menos uma foto.');
+    if (!title.trim()) {
+      setError('Dê um título ao documento.');
+      return;
+    }
+    if (mode === 'foto' && photos.length === 0) {
+      setError('Tire ao menos uma foto.');
+      return;
+    }
+    if (mode === 'arquivo' && !pickedFile) {
+      setError('Escolha um arquivo.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const photoPath = await uploadPhoto(photos[0], 'documents', session.user.id);
+      let fileUrl: string;
+      let fileName: string | null;
+      let mimeType: string;
+
+      if (mode === 'foto') {
+        fileUrl = await uploadPhoto(photos[0], 'documents', session.user.id);
+        fileName = null;
+        mimeType = 'image/jpeg';
+      } else {
+        fileUrl = await uploadFile(
+          pickedFile!.uri,
+          'documents',
+          session.user.id,
+          pickedFile!.mimeType,
+          pickedFile!.name
+        );
+        fileName = pickedFile!.name;
+        mimeType = pickedFile!.mimeType;
+      }
+
       const { error: insertError } = await supabase.from('documents').insert({
         title: title.trim(),
         category,
-        photo_url: photoPath,
+        file_url: fileUrl,
+        file_name: fileName,
+        mime_type: mimeType,
         notes: notes.trim() || null,
         created_by: session.user.id,
       });
@@ -170,8 +214,38 @@ function NewDocumentModal({
           multiline
         />
 
-        <Text style={styles.label}>Foto do documento</Text>
-        <PhotoPicker uris={photos.slice(0, 1)} onChange={(uris) => setPhotos(uris.slice(-1))} />
+        <Text style={styles.label}>Anexo</Text>
+        <View style={styles.categoryRow}>
+          <Pressable
+            style={[styles.categoryOption, mode === 'foto' && styles.categoryOptionActive]}
+            onPress={() => setMode('foto')}
+          >
+            <Text
+              style={[styles.categoryOptionText, mode === 'foto' && styles.categoryOptionTextActive]}
+            >
+              Foto
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.categoryOption, mode === 'arquivo' && styles.categoryOptionActive]}
+            onPress={() => setMode('arquivo')}
+          >
+            <Text
+              style={[
+                styles.categoryOptionText,
+                mode === 'arquivo' && styles.categoryOptionTextActive,
+              ]}
+            >
+              Arquivo (celular ou nuvem)
+            </Text>
+          </Pressable>
+        </View>
+
+        {mode === 'foto' ? (
+          <PhotoPicker uris={photos.slice(0, 1)} onChange={(uris) => setPhotos(uris.slice(-1))} />
+        ) : (
+          <FilePicker file={pickedFile} onChange={setPickedFile} />
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -197,6 +271,8 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingBottom: 90 },
   empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 40 },
   notes: { fontSize: 14, color: '#374151', marginTop: 8 },
+  attachmentWrapper: { marginTop: 10 },
+  attachmentImage: { width: 90, height: 90, borderRadius: 8, backgroundColor: '#F3F4F6' },
   fab: {
     position: 'absolute',
     bottom: 20,

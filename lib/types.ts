@@ -13,6 +13,7 @@ export interface Profile {
   role: Role;
   phone: string | null;
   avatar_url: string | null;
+  active: boolean;
   created_at: string;
 }
 
@@ -66,6 +67,8 @@ export interface ChecklistEntry {
   done: boolean;
   done_by: string | null;
   done_at: string | null;
+  notes: string | null;
+  photo_urls: string[];
   created_at: string;
 }
 
@@ -79,6 +82,7 @@ export interface Task {
   photo_urls: string[];
   created_by: string;
   assigned_to: string | null;
+  scheduled_for: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -98,11 +102,13 @@ export interface Occurrence {
   resolved_at: string | null;
 }
 
-export interface DocumentPhoto {
+export interface DocumentItem {
   id: string;
   title: string;
   category: string;
-  photo_url: string;
+  file_url: string;
+  file_name: string | null;
+  mime_type: string;
   notes: string | null;
   created_by: string;
   created_at: string;

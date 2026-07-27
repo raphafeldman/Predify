@@ -7,16 +7,8 @@ function extensionFromUri(uri: string) {
 
 /** Faz upload de uma foto local (URI do dispositivo) para o bucket "photos" e retorna o caminho salvo. */
 export async function uploadPhoto(localUri: string, folder: string, userId: string) {
-  const arraybuffer = await fetch(localUri).then((res) => res.arrayBuffer());
   const ext = extensionFromUri(localUri);
-  const path = `${folder}/${userId}/${Date.now()}.${ext}`;
-
-  const { error } = await supabase.storage
-    .from('photos')
-    .upload(path, arraybuffer, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-
-  if (error) throw error;
-  return path;
+  return uploadFile(localUri, folder, userId, `image/${ext === 'jpg' ? 'jpeg' : ext}`, `${Date.now()}.${ext}`);
 }
 
 export async function uploadPhotos(localUris: string[], folder: string, userId: string) {
@@ -25,6 +17,26 @@ export async function uploadPhotos(localUris: string[], folder: string, userId: 
     paths.push(await uploadPhoto(uri, folder, userId));
   }
   return paths;
+}
+
+/** Faz upload de qualquer arquivo (foto, PDF, documento...) para o bucket "photos". */
+export async function uploadFile(
+  localUri: string,
+  folder: string,
+  userId: string,
+  mimeType: string,
+  fileName?: string
+) {
+  const arraybuffer = await fetch(localUri).then((res) => res.arrayBuffer());
+  const safeName = fileName ?? `${Date.now()}.${extensionFromUri(localUri)}`;
+  const path = `${folder}/${userId}/${Date.now()}-${safeName}`;
+
+  const { error } = await supabase.storage
+    .from('photos')
+    .upload(path, arraybuffer, { contentType: mimeType });
+
+  if (error) throw error;
+  return path;
 }
 
 export async function getSignedUrl(path: string, expiresInSeconds = 3600) {
