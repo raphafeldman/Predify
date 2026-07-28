@@ -71,7 +71,7 @@ export interface MaintenanceItem {
   model: string | null;
   serial_number: string | null;
   assigned_to: string | null;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -85,7 +85,7 @@ export interface MaintenanceRecord {
   status: MaintenanceRecordStatus;
   description: string;
   photo_urls: string[];
-  performed_by: string;
+  performed_by: string | null;
   performed_at: string;
   created_at: string;
 }
@@ -97,7 +97,7 @@ export interface ChecklistTemplate {
   frequency: MaintenanceFrequency;
   assigned_to: string | null;
   active: boolean;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -121,7 +121,7 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   photo_urls: string[];
-  created_by: string;
+  created_by: string | null;
   assigned_to: string | null;
   scheduled_for: string | null;
   created_at: string;
@@ -143,7 +143,7 @@ export interface Occurrence {
   category: string;
   estimated_cost: number | null;
   photo_urls: string[];
-  created_by: string;
+  created_by: string | null;
   assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
@@ -157,7 +157,7 @@ export interface DocumentItem {
   file_name: string | null;
   mime_type: string;
   notes: string | null;
-  created_by: string;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -165,7 +165,7 @@ export interface Comment {
   id: string;
   record_type: RecordType;
   record_id: string;
-  author_id: string;
+  author_id: string | null;
   body: string;
   created_at: string;
 }
@@ -207,7 +207,7 @@ export interface ServiceRequest {
   quote_value: number | null;
   notes: string | null;
   photo_urls: string[];
-  created_by: string;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }

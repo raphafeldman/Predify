@@ -49,6 +49,8 @@ npx supabase functions deploy admin-users
 npx supabase functions deploy admin-reset-password
 npx supabase functions deploy whatsapp-daily-digest
 npx supabase functions deploy whatsapp-send
+npx supabase functions deploy admin-delete-user
+npx supabase functions deploy admin-delete-condominio
 ```
 
 Sem isso, os botões de cadastrar usuário e de redefinir senha no app mostram
@@ -164,6 +166,16 @@ sair do app:
    cadastrados) começam em 0 — ajuste na mesma tela de edição do condomínio,
    junto com o status de cobrança (ainda é um ajuste manual, feito por você;
    a cobrança automática de verdade é uma etapa futura).
+5. **Excluir um condomínio inteiro** — botão "Excluir condomínio" (zona de
+   risco) na mesma tela de edição; pede pra digitar o nome do condomínio
+   pra confirmar. Apaga todas as contas de usuário dele, os arquivos no
+   Storage, e todos os registros — não dá pra desfazer.
+6. **Excluir só um usuário** (inclusive um síndico) — pela tela "Ver dados
+   do condomínio (suporte)", ícone de lixeira ao lado do nome na lista
+   Equipe; pede pra digitar o nome completo da pessoa pra confirmar. A
+   conta é apagada, mas o que a pessoa criou (Ordens, Tarefas, Documentos,
+   comentários) continua existindo — só passa a mostrar "Usuário removido"
+   no lugar do nome dela.
 
 ## 7. Síndico cadastrando funcionários
 

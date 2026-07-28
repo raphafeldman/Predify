@@ -66,7 +66,7 @@ export function CommentsThread({ recordType, recordId }: Props) {
     <View style={styles.container}>
       {comments.map((comment) => (
         <View key={comment.id} style={styles.commentRow}>
-          <Text style={styles.commentAuthor}>{comment.profiles?.full_name ?? 'Usuário'}</Text>
+          <Text style={styles.commentAuthor}>{comment.profiles?.full_name ?? 'Usuário removido'}</Text>
           <Text style={styles.commentBody}>{comment.body}</Text>
         </View>
       ))}

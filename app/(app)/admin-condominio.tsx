@@ -1,13 +1,17 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DashboardSummary } from '../../components/DashboardSummary';
 import { FeedCard, type FeedItem } from './index';
+import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { FREQUENCY_LABEL } from '../../lib/frequency';
-import { supabase } from '../../lib/supabase';
+import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, spacing } from '../../lib/theme';
 import type {
   ChecklistTemplate,
@@ -32,6 +36,7 @@ export default function AdminCondominioScreen() {
   const [rotinas, setRotinas] = useState<ChecklistTemplate[]>([]);
   const [prestadores, setPrestadores] = useState<ServiceRequest[]>([]);
   const [openOccurrences, setOpenOccurrences] = useState(0);
+  const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
 
   const load = useCallback(async () => {
     if (!condominioId) return;
@@ -131,7 +136,9 @@ export default function AdminCondominioScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{params.name || 'Condomínio'}</Text>
-      <Text style={styles.subtitle}>Visão de suporte — somente leitura</Text>
+      <Text style={styles.subtitle}>
+        Visão de suporte — somente leitura, exceto excluir um usuário (ícone de lixeira abaixo).
+      </Text>
 
       <DashboardSummary
         stats={[
@@ -154,6 +161,9 @@ export default function AdminCondominioScreen() {
                 <Text style={styles.equipeMeta}>{p.role === 'sindico' ? 'Síndico' : 'Funcionário'}</Text>
               </View>
               <Badge label={p.active ? 'Ativo' : 'Bloqueado'} color={p.active ? colors.success : colors.danger} />
+              <Pressable style={styles.deleteIconButton} onPress={() => setDeletingUser(p)} hitSlop={8}>
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </Pressable>
             </View>
           ))
         )}
@@ -214,7 +224,75 @@ export default function AdminCondominioScreen() {
       ) : (
         feed.map((item) => <FeedCard key={`${item.kind}-${item.id}`} item={item} />)
       )}
+
+      <DeleteUserModal profile={deletingUser} onClose={() => setDeletingUser(null)} onDeleted={() => { setDeletingUser(null); load(); }} />
     </ScrollView>
+  );
+}
+
+function DeleteUserModal({
+  profile,
+  onClose,
+  onDeleted,
+}: {
+  profile: Profile | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setConfirmText('');
+    setError(null);
+  }, [profile]);
+
+  async function handleDelete() {
+    if (!profile) return;
+    setDeleting(true);
+    setError(null);
+    const { data, error: invokeError } = await supabase.functions.invoke('admin-delete-user', {
+      body: { user_id: profile.id },
+    });
+    setDeleting(false);
+    const responseError = await getInvokeErrorMessage(invokeError, data);
+    if (responseError) {
+      setError(responseError);
+      return;
+    }
+    onDeleted();
+  }
+
+  if (!profile) return null;
+
+  return (
+    <Modal visible={Boolean(profile)} animationType="slide" onRequestClose={onClose}>
+      <ModalFormLayout style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>Excluir usuário</Text>
+        <Text style={styles.confirmText}>
+          Isso apaga PERMANENTEMENTE a conta de &quot;{profile.full_name}&quot; ({profile.role === 'sindico' ? 'síndico' : 'funcionário'}).
+          Ordens, tarefas e documentos que essa pessoa criou continuam existindo, só deixam de mostrar o nome dela.
+          Não dá pra desfazer.
+        </Text>
+        <Text style={styles.hintSmall}>
+          Digite o nome completo (&quot;{profile.full_name}&quot;) pra confirmar.
+        </Text>
+        <TextField value={confirmText} onChangeText={setConfirmText} placeholder={profile.full_name} />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.confirmButtonsRow}>
+          <Button title="Cancelar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button
+            title="Excluir permanentemente"
+            variant="danger"
+            onPress={handleDelete}
+            loading={deleting}
+            disabled={confirmText !== profile.full_name}
+            style={styles.flex1}
+          />
+        </View>
+      </ModalFormLayout>
+    </Modal>
   );
 }
 
@@ -246,4 +324,11 @@ const styles = StyleSheet.create({
   simpleRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   simpleRowTitle: { fontFamily: fontFamily.semibold, fontSize: fontSize.base, color: colors.textPrimary },
   simpleRowMeta: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
+  deleteIconButton: { marginLeft: spacing.sm, padding: spacing.xs },
+  modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
+  modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
+  confirmText: { fontFamily: fontFamily.medium, color: colors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.md },
+  error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  confirmButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
+  flex1: { flex: 1 },
 });

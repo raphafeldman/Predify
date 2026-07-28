@@ -1589,6 +1589,113 @@ create trigger on_occurrence_completed
   for each row execute function public.notify_os_completed();
 
 -- ============================================================
+-- Migração: permite excluir um condomínio inteiro, ou uma conta de
+-- usuário isolada, pelo painel do administrador da plataforma.
+--
+-- Duas regras de cascata diferentes:
+-- 1) FKs pra profiles(id) (quem criou/executou algo) viram
+--    "on delete set null" — apagar a conta de alguém mantém o que essa
+--    pessoa criou (Ordens, Tarefas, Documentos, comentários...), só some
+--    o vínculo com o nome dela (o app mostra "Usuário removido").
+-- 2) FKs pra condominios(id) viram "on delete cascade" — apagar o
+--    condomínio inteiro arrasta tudo dele junto, já que o locatário
+--    inteiro deixa de existir.
+-- As duas regras juntas fazem "excluir condomínio" funcionar em duas
+-- etapas na Edge Function: primeiro apaga a conta de cada usuário do
+-- condomínio (só anula a autoria via a regra 1), depois apaga a linha do
+-- condomínio (que aí sim arrasta tudo que sobrou via a regra 2).
+-- ============================================================
+
+-- --- 1) FKs pra profiles(id): "on delete set null" ---
+alter table public.occurrences alter column created_by drop not null;
+alter table public.occurrences drop constraint if exists occurrences_created_by_fkey;
+alter table public.occurrences add constraint occurrences_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.occurrences drop constraint if exists occurrences_assigned_to_fkey;
+alter table public.occurrences add constraint occurrences_assigned_to_fkey
+  foreign key (assigned_to) references public.profiles (id) on delete set null;
+
+alter table public.tasks alter column created_by drop not null;
+alter table public.tasks drop constraint if exists tasks_created_by_fkey;
+alter table public.tasks add constraint tasks_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.tasks drop constraint if exists tasks_assigned_to_fkey;
+alter table public.tasks add constraint tasks_assigned_to_fkey
+  foreign key (assigned_to) references public.profiles (id) on delete set null;
+
+alter table public.documents alter column created_by drop not null;
+alter table public.documents drop constraint if exists documents_created_by_fkey;
+alter table public.documents add constraint documents_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.comments alter column author_id drop not null;
+alter table public.comments drop constraint if exists comments_author_id_fkey;
+alter table public.comments add constraint comments_author_id_fkey
+  foreign key (author_id) references public.profiles (id) on delete set null;
+
+alter table public.maintenance_records alter column performed_by drop not null;
+alter table public.maintenance_records drop constraint if exists maintenance_records_performed_by_fkey;
+alter table public.maintenance_records add constraint maintenance_records_performed_by_fkey
+  foreign key (performed_by) references public.profiles (id) on delete set null;
+
+alter table public.maintenance_items alter column created_by drop not null;
+alter table public.maintenance_items drop constraint if exists maintenance_items_created_by_fkey;
+alter table public.maintenance_items add constraint maintenance_items_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.maintenance_items drop constraint if exists maintenance_items_assigned_to_fkey;
+alter table public.maintenance_items add constraint maintenance_items_assigned_to_fkey
+  foreign key (assigned_to) references public.profiles (id) on delete set null;
+
+alter table public.checklist_templates alter column created_by drop not null;
+alter table public.checklist_templates drop constraint if exists checklist_templates_created_by_fkey;
+alter table public.checklist_templates add constraint checklist_templates_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.checklist_templates drop constraint if exists checklist_templates_assigned_to_fkey;
+alter table public.checklist_templates add constraint checklist_templates_assigned_to_fkey
+  foreign key (assigned_to) references public.profiles (id) on delete set null;
+
+alter table public.checklist_entries drop constraint if exists checklist_entries_done_by_fkey;
+alter table public.checklist_entries add constraint checklist_entries_done_by_fkey
+  foreign key (done_by) references public.profiles (id) on delete set null;
+
+alter table public.service_requests alter column created_by drop not null;
+alter table public.service_requests drop constraint if exists service_requests_created_by_fkey;
+alter table public.service_requests add constraint service_requests_created_by_fkey
+  foreign key (created_by) references public.profiles (id) on delete set null;
+
+alter table public.whatsapp_messages alter column user_id drop not null;
+alter table public.whatsapp_messages drop constraint if exists whatsapp_messages_user_id_fkey;
+alter table public.whatsapp_messages add constraint whatsapp_messages_user_id_fkey
+  foreign key (user_id) references public.profiles (id) on delete set null;
+
+-- --- 2) FKs pra condominios(id): "on delete cascade" ---
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'maintenance_items', 'maintenance_records', 'checklist_templates',
+    'checklist_entries', 'tasks', 'occurrences', 'documents', 'comments',
+    'service_requests', 'notifications', 'whatsapp_messages'
+  ]
+  loop
+    execute format('alter table public.%I drop constraint if exists %I', t, t || '_condominio_id_fkey');
+    execute format(
+      'alter table public.%I add constraint %I foreign key (condominio_id) references public.condominios (id) on delete cascade',
+      t, t || '_condominio_id_fkey'
+    );
+  end loop;
+end $$;
+
+alter table public.profiles drop constraint if exists profiles_condominio_id_fkey;
+alter table public.profiles add constraint profiles_condominio_id_fkey
+  foreign key (condominio_id) references public.condominios (id) on delete cascade;
+
+-- ============================================================
 -- Migração: agente de WhatsApp (fase 1 — só envio: lembrete diário de
 -- pendências e aviso avulso do síndico). O token de verdade da Meta nunca
 -- entra aqui — mora só nas Edge Functions (Deno.env), mesmo padrão de

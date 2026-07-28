@@ -401,14 +401,35 @@ function EditCondominioModal({
   const [billingStatus, setBillingStatus] = useState<BillingStatus>('trialing');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (condominio) {
       setPaidSeats(String(condominio.paid_seats));
       setBillingStatus(condominio.billing_status);
       setError(null);
+      setConfirmingDelete(false);
+      setDeleteConfirmText('');
     }
   }, [condominio]);
+
+  async function deleteCondominio() {
+    if (!condominio) return;
+    setDeleting(true);
+    setError(null);
+    const { data, error: invokeError } = await supabase.functions.invoke('admin-delete-condominio', {
+      body: { condominio_id: condominio.id },
+    });
+    setDeleting(false);
+    const responseError = await getInvokeErrorMessage(invokeError, data);
+    if (responseError) {
+      setError(responseError);
+      return;
+    }
+    onSaved();
+  }
 
   async function save() {
     if (!condominio) return;
@@ -490,7 +511,45 @@ function EditCondominioModal({
           cobrar.
         </Text>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Text style={styles.dangerZoneTitle}>Zona de risco</Text>
+        {confirmingDelete ? (
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmText}>
+              Isso apaga PERMANENTEMENTE o condomínio &quot;{condominio.name}&quot; — {usage?.users_count ?? '?'}{' '}
+              usuário(s), {usage?.occurrences_count ?? '?'} ordem(ns) de serviço,{' '}
+              {usage?.documents_count ?? '?'} documento(s) e tudo mais que existe dele. Não dá pra desfazer.
+            </Text>
+            <Text style={styles.hintSmall}>
+              Digite o nome do condomínio (&quot;{condominio.name}&quot;) pra confirmar.
+            </Text>
+            <TextField value={deleteConfirmText} onChangeText={setDeleteConfirmText} placeholder={condominio.name ?? ''} />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={styles.confirmButtonsRow}>
+              <Button
+                title="Cancelar"
+                variant="secondary"
+                onPress={() => {
+                  setConfirmingDelete(false);
+                  setDeleteConfirmText('');
+                  setError(null);
+                }}
+                style={styles.flex1}
+              />
+              <Button
+                title="Excluir permanentemente"
+                variant="danger"
+                onPress={deleteCondominio}
+                loading={deleting}
+                disabled={deleteConfirmText !== condominio.name}
+                style={styles.flex1}
+              />
+            </View>
+          </View>
+        ) : (
+          <Button title="Excluir condomínio" variant="danger" onPress={() => setConfirmingDelete(true)} />
+        )}
+
+        {!confirmingDelete && error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.modalButtonsRow}>
           <Button title="Fechar" variant="secondary" onPress={onClose} style={styles.flex1} />
@@ -551,6 +610,10 @@ const styles = StyleSheet.create({
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
   label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
+  dangerZoneTitle: { fontFamily: fontFamily.bold, fontSize: fontSize.sm, color: colors.danger, marginTop: spacing.xl, marginBottom: spacing.sm },
+  confirmRow: { backgroundColor: colors.dangerLight, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+  confirmText: { fontFamily: fontFamily.medium, color: '#991B1B', fontSize: fontSize.sm },
+  confirmButtonsRow: { flexDirection: 'row', gap: spacing.sm },
   hint: { marginTop: spacing.sm, fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textSecondary },
   secondaryActionSpacing: { marginTop: spacing.sm },
   hintSmall: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
