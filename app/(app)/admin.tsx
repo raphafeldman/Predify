@@ -6,7 +6,7 @@ import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/TextField';
-import { supabase } from '../../lib/supabase';
+import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { BillingStatus, Condominio, CondominioUsageStats, Profile } from '../../lib/types';
 
@@ -318,7 +318,7 @@ function CreateSindicoModal({
       },
     });
     setSaving(false);
-    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    const responseError = await getInvokeErrorMessage(invokeError, data);
     if (responseError) {
       setError(responseError);
       return;

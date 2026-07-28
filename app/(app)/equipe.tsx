@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { JOB_TITLE_LABEL } from '../../lib/jobTitles';
-import { supabase } from '../../lib/supabase';
+import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Profile, Role } from '../../lib/types';
 
@@ -183,7 +183,7 @@ function NewUserModal({
     });
     setSaving(false);
 
-    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    const responseError = await getInvokeErrorMessage(invokeError, data);
     if (responseError) {
       setError(responseError);
       return;
@@ -307,7 +307,7 @@ function EditProfileModal({
       body: { user_id: profile.id, password: newPassword },
     });
     setResettingPassword(false);
-    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    const responseError = await getInvokeErrorMessage(invokeError, data);
     if (responseError) {
       setError(responseError);
       return;
@@ -330,7 +330,7 @@ function EditProfileModal({
       body: { user_id: profile.id, message: whatsappMessage.trim() },
     });
     setSendingWhatsapp(false);
-    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    const responseError = await getInvokeErrorMessage(invokeError, data);
     if (responseError) {
       setError(responseError);
       return;

@@ -169,7 +169,11 @@ Deno.serve(async (req) => {
     });
 
     if (createError) {
-      return jsonResponse({ error: createError.message }, 400);
+      const message =
+        createError.message.includes('already registered') || createError.message.includes('already exists')
+          ? 'Já existe uma conta com esse e-mail.'
+          : createError.message;
+      return jsonResponse({ error: message }, 400);
     }
 
     return jsonResponse({ user: created.user });

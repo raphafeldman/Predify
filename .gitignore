@@ -44,3 +44,5 @@ yarn-error.*
 
 # Supabase CLI local cache/link metadata
 supabase/.temp/
+
+.vercel
