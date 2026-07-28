@@ -15,10 +15,11 @@ import { AdminPanel } from './admin';
 import { STATUS_COLOR, STATUS_LABEL } from './ordens';
 import { useAuth } from '../../lib/auth-context';
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../../lib/categories';
-import { FREQUENCY_LABEL, getPeriodKey } from '../../lib/frequency';
+import { FREQUENCY_LABEL } from '../../lib/frequency';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { useRotinaChecklist } from '../../lib/useRotinaChecklist';
 import type {
   ChecklistEntry,
   ChecklistTemplate,
@@ -102,8 +103,7 @@ function OrdemActivityRow({ ordem }: { ordem: Occurrence }) {
 function FuncionarioHome() {
   const { session, profile } = useAuth();
   const router = useRouter();
-  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
-  const [entries, setEntries] = useState<ChecklistEntry[]>([]);
+  const rotina = useRotinaChecklist();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [openOrdersCount, setOpenOrdersCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -114,8 +114,7 @@ function FuncionarioHome() {
   const today = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
-    const [templatesRes, tasksRes, occRes, unreadRes, condoRes] = await Promise.all([
-      supabase.from('checklist_templates').select('*').eq('active', true).order('title'),
+    const [tasksRes, occRes, unreadRes, condoRes] = await Promise.all([
       supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(50),
       supabase
         .from('occurrences')
@@ -127,75 +126,16 @@ function FuncionarioHome() {
         : Promise.resolve({ data: null }),
     ]);
 
-    const myTemplates = ((templatesRes.data as ChecklistTemplate[]) ?? []).filter(
-      (t) => !t.assigned_to || t.assigned_to === session?.user.id
-    );
-    setTemplates(myTemplates);
-
-    if (myTemplates.length > 0) {
-      const { data: entriesData } = await supabase
-        .from('checklist_entries')
-        .select('*')
-        .in(
-          'template_id',
-          myTemplates.map((t) => t.id)
-        );
-      setEntries((entriesData as ChecklistEntry[]) ?? []);
-    } else {
-      setEntries([]);
-    }
-
     if (tasksRes.data) setTasks(tasksRes.data as Task[]);
     setOpenOrdersCount(occRes.count ?? 0);
     setUnreadCount(unreadRes.count ?? 0);
     if (condoRes.data) setCondominioName((condoRes.data as { name: string | null }).name);
     setLoading(false);
-  }, [session?.user?.id, profile?.condominio_id]);
+  }, [profile?.condominio_id]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  function entryFor(template: ChecklistTemplate) {
-    const periodKey = getPeriodKey(template.frequency);
-    return entries.find((e) => e.template_id === template.id && e.entry_date === periodKey);
-  }
-
-  async function toggleChecklist(template: ChecklistTemplate) {
-    const periodKey = getPeriodKey(template.frequency);
-    const current = entryFor(template);
-    const nextDone = !current?.done;
-    await supabase.from('checklist_entries').upsert(
-      {
-        template_id: template.id,
-        entry_date: periodKey,
-        done: nextDone,
-        done_by: session?.user.id ?? null,
-        done_at: nextDone ? new Date().toISOString() : null,
-      },
-      { onConflict: 'template_id,entry_date' }
-    );
-    load();
-  }
-
-  async function saveChecklistDetails(template: ChecklistTemplate, notes: string, newPhotoUris: string[]) {
-    if (!session || !profile) return;
-    const periodKey = getPeriodKey(template.frequency);
-    const current = entryFor(template);
-    const uploadedPaths = newPhotoUris.length
-      ? await uploadPhotos(newPhotoUris, 'checklist', session.user.id, profile.condominio_id)
-      : [];
-    await supabase.from('checklist_entries').upsert(
-      {
-        template_id: template.id,
-        entry_date: periodKey,
-        notes: notes.trim() || null,
-        photo_urls: [...(current?.photo_urls ?? []), ...uploadedPaths],
-      },
-      { onConflict: 'template_id,entry_date' }
-    );
-    load();
-  }
 
   async function toggleTask(task: Task) {
     const done = task.status === 'concluida';
@@ -209,7 +149,6 @@ function FuncionarioHome() {
     load();
   }
 
-  const doneCount = templates.filter((t) => entryFor(t)?.done).length;
   const myTasks = tasks.filter(
     (t) => t.assigned_to === session?.user.id || t.created_by === session?.user.id
   );
@@ -226,7 +165,7 @@ function FuncionarioHome() {
       icon: 'checkbox-outline',
       iconColor: colors.primary,
       label: 'Rotina concluída',
-      value: `${doneCount}/${templates.length}`,
+      value: `${rotina.doneCount}/${rotina.templates.length}`,
       caption: 'Hoje',
       captionColor: colors.primary,
     },
@@ -268,16 +207,16 @@ function FuncionarioHome() {
               <VisaoGeralCard stats={stats} />
 
               <Text style={styles.sectionTitle}>Rotina de hoje</Text>
-              {templates.length === 0 && !loading && (
+              {rotina.templates.length === 0 && !rotina.loading && (
                 <Text style={styles.empty}>O síndico ainda não cadastrou itens de rotina.</Text>
               )}
-              {templates.map((template) => (
+              {rotina.templates.map((template) => (
                 <ChecklistItemRow
                   key={template.id}
                   template={template}
-                  entry={entryFor(template)}
-                  onToggle={() => toggleChecklist(template)}
-                  onSaveDetails={(notes, photos) => saveChecklistDetails(template, notes, photos)}
+                  entry={rotina.entryFor(template)}
+                  onToggle={() => rotina.toggleChecklist(template)}
+                  onSaveDetails={(notes, photos) => rotina.saveChecklistDetails(template, notes, photos)}
                 />
               ))}
 
@@ -533,6 +472,7 @@ export type FeedItem =
 function SindicoHome() {
   const { profile } = useAuth();
   const router = useRouter();
+  const rotina = useRotinaChecklist();
   const [recentOrdens, setRecentOrdens] = useState<Occurrence[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
@@ -669,6 +609,21 @@ function SindicoHome() {
             />
             <View style={styles.bodyContent}>
               <VisaoGeralCard stats={stats} period={period} onPeriodChange={setPeriod} />
+
+              {rotina.templates.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Rotina de hoje</Text>
+                  {rotina.templates.map((template) => (
+                    <ChecklistItemRow
+                      key={template.id}
+                      template={template}
+                      entry={rotina.entryFor(template)}
+                      onToggle={() => rotina.toggleChecklist(template)}
+                      onSaveDetails={(notes, photos) => rotina.saveChecklistDetails(template, notes, photos)}
+                    />
+                  ))}
+                </>
+              )}
 
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>Atividades recentes</Text>

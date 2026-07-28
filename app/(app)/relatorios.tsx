@@ -54,6 +54,7 @@ interface ReportItem {
   title: string;
   status: string;
   date: string;
+  performedBy?: string;
 }
 
 interface ReportData {
@@ -111,7 +112,7 @@ export default function RelatoriosScreen() {
         .gte('created_at', periodStartIso),
       supabase
         .from('checklist_entries')
-        .select('*, checklist_templates(title)')
+        .select('*, checklist_templates(title), profiles(full_name)')
         .eq('done', true)
         .gte('entry_date', periodStart),
     ]);
@@ -158,6 +159,8 @@ export default function RelatoriosScreen() {
               'Rotina',
             status: 'Concluída',
             date: c.done_at ?? `${c.entry_date}T00:00:00.000Z`,
+            performedBy:
+              (c as { profiles?: { full_name: string } | null }).profiles?.full_name ?? 'Usuário removido',
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
       },
@@ -312,9 +315,14 @@ export default function RelatoriosScreen() {
                   items.map((item, index) => (
                     <View key={`${category}-${index}`} style={styles.itemRow}>
                       <Text style={styles.itemDate}>{new Date(item.date).toLocaleDateString('pt-BR')}</Text>
-                      <Text style={styles.itemTitle} numberOfLines={1}>
-                        {item.title}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemTitle} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        {item.performedBy ? (
+                          <Text style={styles.itemPerformedBy}>Concluído por {item.performedBy}</Text>
+                        ) : null}
+                      </View>
                       <Text style={styles.itemStatus}>{item.status}</Text>
                     </View>
                   ))
@@ -452,16 +460,17 @@ function buildReportHtml(
                 <td>${new Date(item.date).toLocaleDateString('pt-BR')}</td>
                 <td>${escapeHtml(item.title)}</td>
                 <td>${escapeHtml(item.status)}</td>
+                <td>${item.performedBy ? escapeHtml(item.performedBy) : '—'}</td>
               </tr>
             `
           )
           .join('')
-      : '<tr><td colspan="3">Nenhum item nesse período.</td></tr>';
+      : '<tr><td colspan="4">Nenhum item nesse período.</td></tr>';
 
     return `
       <h3>${category} (${items.length})</h3>
       <table>
-        <tr><th>Data</th><th>Item</th><th>Status</th></tr>
+        <tr><th>Data</th><th>Item</th><th>Status</th><th>Executado por</th></tr>
         ${rows}
       </table>
     `;
@@ -548,7 +557,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   itemDate: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, width: 72 },
-  itemTitle: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textPrimary, flex: 1 },
+  itemTitle: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textPrimary },
+  itemPerformedBy: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: 1 },
   itemStatus: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, color: colors.textSecondary },
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
