@@ -1,19 +1,17 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
+import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { TextField } from '../../components/ui/TextField';
+import { NewServiceRequestModal } from './prestadores';
 import { useAuth } from '../../lib/auth-context';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { colors, floatingShadow, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Occurrence, OccurrenceSeverity } from '../../lib/types';
 
 const SEVERITY_LABEL: Record<OccurrenceSeverity, string> = {
@@ -23,9 +21,9 @@ const SEVERITY_LABEL: Record<OccurrenceSeverity, string> = {
 };
 
 const SEVERITY_COLOR: Record<OccurrenceSeverity, string> = {
-  baixa: '#10B981',
-  media: '#F59E0B',
-  alta: '#DC2626',
+  baixa: colors.success,
+  media: colors.warning,
+  alta: colors.danger,
 };
 
 export default function OcorrenciasScreen() {
@@ -33,6 +31,7 @@ export default function OcorrenciasScreen() {
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [quoteRequestFor, setQuoteRequestFor] = useState<Occurrence | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -71,7 +70,13 @@ export default function OcorrenciasScreen() {
         refreshing={loading}
         onRefresh={load}
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Nenhuma ocorrência registrada.</Text> : null
+          !loading ? (
+            <EmptyState
+              icon="checkmark-circle-outline"
+              title="Nenhuma ocorrência registrada"
+              subtitle="Tudo tranquilo por aqui."
+            />
+          ) : null
         }
         renderItem={({ item }) => (
           <RecordCard
@@ -80,26 +85,31 @@ export default function OcorrenciasScreen() {
             title={item.title}
             subtitle={new Date(item.created_at).toLocaleString('pt-BR')}
             badge={{
-              label: `${SEVERITY_LABEL[item.severity]} • ${
-                item.status === 'aberta' ? 'Aberta' : 'Resolvida'
-              }`,
-              color: item.status === 'resolvida' ? '#6B7280' : SEVERITY_COLOR[item.severity],
+              label: `${SEVERITY_LABEL[item.severity]} • ${item.status === 'aberta' ? 'Aberta' : 'Resolvida'}`,
+              color: item.status === 'resolvida' ? colors.textMuted : SEVERITY_COLOR[item.severity],
             }}
             photoPaths={item.photo_urls}
           >
             <Text style={styles.description}>{item.description}</Text>
-            {item.status === 'aberta' &&
-              (profile?.role === 'sindico' || item.created_by === session?.user.id) && (
-                <Pressable style={styles.resolveButton} onPress={() => markResolved(item.id)}>
-                  <Text style={styles.resolveButtonText}>Marcar como resolvida</Text>
-                </Pressable>
-              )}
+            <View style={styles.actionsRow}>
+              {item.status === 'aberta' &&
+                (profile?.role === 'sindico' || item.created_by === session?.user.id) && (
+                  <Pressable style={styles.resolveButton} onPress={() => markResolved(item.id)}>
+                    <Text style={styles.resolveButtonText}>Marcar como resolvida</Text>
+                  </Pressable>
+                )}
+              <Pressable style={styles.quoteButton} onPress={() => setQuoteRequestFor(item)}>
+                <Ionicons name="briefcase-outline" size={13} color={colors.primary} />
+                <Text style={styles.quoteButtonText}>Solicitar orçamento</Text>
+              </Pressable>
+            </View>
           </RecordCard>
         )}
       />
 
       <Pressable style={styles.fab} onPress={() => setFormOpen(true)}>
-        <Text style={styles.fabText}>+ Nova ocorrência</Text>
+        <Ionicons name="add" size={18} color={colors.textOnPrimary} />
+        <Text style={styles.fabText}>Nova ocorrência</Text>
       </Pressable>
 
       <NewOccurrenceModal
@@ -109,6 +119,15 @@ export default function OcorrenciasScreen() {
           setFormOpen(false);
           load();
         }}
+      />
+
+      <NewServiceRequestModal
+        visible={Boolean(quoteRequestFor)}
+        occurrenceId={quoteRequestFor?.id}
+        initialTitle={quoteRequestFor?.title}
+        initialNotes={quoteRequestFor?.description}
+        onClose={() => setQuoteRequestFor(null)}
+        onCreated={() => setQuoteRequestFor(null)}
       />
     </View>
   );
@@ -123,7 +142,7 @@ function NewOccurrenceModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<OccurrenceSeverity>('media');
@@ -140,7 +159,7 @@ function NewOccurrenceModal({
   }
 
   async function submit() {
-    if (!session) return;
+    if (!session || !profile) return;
     if (!title.trim() || !description.trim()) {
       setError('Preencha título e descrição.');
       return;
@@ -149,7 +168,7 @@ function NewOccurrenceModal({
     setError(null);
     try {
       const photoPaths = photos.length
-        ? await uploadPhotos(photos, 'occurrences', session.user.id)
+        ? await uploadPhotos(photos, 'occurrences', session.user.id, profile.condominio_id)
         : [];
       const { error: insertError } = await supabase.from('occurrences').insert({
         title: title.trim(),
@@ -170,20 +189,12 @@ function NewOccurrenceModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
+      <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Nova ocorrência</Text>
 
-        <Text style={styles.label}>Título</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Ex: Vazamento na garagem"
-        />
-
-        <Text style={styles.label}>Descrição</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
+        <TextField label="Título" value={title} onChangeText={setTitle} placeholder="Ex: Vazamento na garagem" />
+        <TextField
+          label="Descrição"
           value={description}
           onChangeText={setDescription}
           placeholder="Descreva o que aconteceu"
@@ -195,13 +206,10 @@ function NewOccurrenceModal({
           {(Object.keys(SEVERITY_LABEL) as OccurrenceSeverity[]).map((key) => (
             <Pressable
               key={key}
-              style={[
-                styles.severityOption,
-                severity === key && { backgroundColor: SEVERITY_COLOR[key] },
-              ]}
+              style={[styles.severityOption, severity === key && { backgroundColor: SEVERITY_COLOR[key], borderColor: SEVERITY_COLOR[key] }]}
               onPress={() => setSeverity(key)}
             >
-              <Text style={[styles.severityOptionText, severity === key && { color: '#fff' }]}>
+              <Text style={[styles.severityOptionText, severity === key && styles.severityOptionTextActive]}>
                 {SEVERITY_LABEL[key]}
               </Text>
             </Pressable>
@@ -214,89 +222,67 @@ function NewOccurrenceModal({
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.modalButtonsRow}>
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </Pressable>
-          <Pressable style={styles.saveButton} onPress={submit} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Salvar</Text>
-            )}
-          </Pressable>
+          <Button title="Cancelar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
-      </View>
+      </ModalFormLayout>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  listContent: { padding: 16, paddingBottom: 90 },
-  empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 40 },
-  description: { fontSize: 14, color: '#374151', marginTop: 8 },
+  container: { flex: 1, backgroundColor: colors.background },
+  listContent: { padding: spacing.lg, paddingBottom: 90 },
+  description: { fontFamily: fontFamily.regular, fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.sm },
+  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   resolveButton: {
-    marginTop: 10,
     alignSelf: 'flex-start',
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
+    backgroundColor: colors.successLight,
+    borderRadius: radius.sm,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm,
   },
-  resolveButtonText: { color: '#059669', fontWeight: '600', fontSize: 12 },
+  resolveButtonText: { fontFamily: fontFamily.semibold, color: '#15803D', fontSize: fontSize.xs },
+  quoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.sm,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+  },
+  quoteButtonText: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.xs },
   fab: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
-    backgroundColor: '#1F6FEB',
-    borderRadius: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
+    bottom: spacing.xl,
+    right: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    ...floatingShadow,
   },
-  fabText: { color: '#fff', fontWeight: '700' },
-  modalContainer: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fff' },
-  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#111827' },
-  label: { fontSize: 13, color: '#374151', marginTop: 12, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-  },
-  textArea: { minHeight: 90, textAlignVertical: 'top' },
-  severityRow: { flexDirection: 'row', gap: 8 },
+  fabText: { fontFamily: fontFamily.bold, color: colors.textOnPrimary, fontSize: fontSize.sm },
+  modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
+  modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
+  label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
+  severityRow: { flexDirection: 'row', gap: spacing.sm },
   severityOption: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
   },
-  severityOptionText: { color: '#374151', fontWeight: '600', fontSize: 13 },
-  error: { color: '#DC2626', marginTop: 12, fontSize: 13 },
-  modalButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  cancelButtonText: { color: '#374151', fontWeight: '600' },
-  saveButton: {
-    flex: 1,
-    backgroundColor: '#1F6FEB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  saveButtonText: { color: '#fff', fontWeight: '700' },
+  severityOptionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
+  severityOptionTextActive: { color: colors.textOnPrimary },
+  error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  modalButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
+  flex1: { flex: 1 },
 });

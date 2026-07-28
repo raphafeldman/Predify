@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
 
 interface Props {
   uris: string[];
@@ -37,11 +38,11 @@ export function PhotoPicker({ uris, onChange }: Props) {
     <View>
       <View style={styles.buttonsRow}>
         <Pressable style={styles.button} onPress={takePhoto}>
-          <Ionicons name="camera" size={18} color="#1F6FEB" />
+          <Ionicons name="camera" size={18} color={colors.primary} />
           <Text style={styles.buttonText}>Tirar foto</Text>
         </Pressable>
         <Pressable style={styles.button} onPress={pickFromLibrary}>
-          <Ionicons name="images" size={18} color="#1F6FEB" />
+          <Ionicons name="images" size={18} color={colors.primary} />
           <Text style={styles.buttonText}>Galeria</Text>
         </Pressable>
       </View>
@@ -52,7 +53,7 @@ export function PhotoPicker({ uris, onChange }: Props) {
             <View key={uri} style={styles.previewWrapper}>
               <Image source={{ uri }} style={styles.previewImage} />
               <Pressable style={styles.removeBadge} onPress={() => removeAt(index)}>
-                <Ionicons name="close" size={14} color="#fff" />
+                <Ionicons name="close" size={14} color={colors.textOnPrimary} />
               </Pressable>
             </View>
           ))}
@@ -63,26 +64,26 @@ export function PhotoPicker({ uris, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  buttonsRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  buttonsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#1F6FEB',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    gap: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  buttonText: { color: '#1F6FEB', fontWeight: '600' },
-  previewRow: { marginTop: 10 },
-  previewWrapper: { marginRight: 8, position: 'relative' },
-  previewImage: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  buttonText: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.sm },
+  previewRow: { marginTop: spacing.sm },
+  previewWrapper: { marginRight: spacing.sm, position: 'relative' },
+  previewImage: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   removeBadge: {
     position: 'absolute',
     top: -6,
     right: -6,
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.danger,
     borderRadius: 10,
     width: 20,
     height: 20,

@@ -5,7 +5,8 @@ export type RecordType =
   | 'maintenance_record'
   | 'task'
   | 'checklist_entry'
-  | 'document';
+  | 'document'
+  | 'service_request';
 
 export interface Profile {
   id: string;
@@ -14,7 +15,39 @@ export interface Profile {
   phone: string | null;
   avatar_url: string | null;
   active: boolean;
+  condominio_id: string;
   created_at: string;
+}
+
+export type BillingStatus = 'trialing' | 'active' | 'exempt' | 'suspended';
+export type Plan = 'free' | 'paid';
+
+export interface Condominio {
+  id: string;
+  name: string | null;
+  cnpj: string | null;
+  address: string | null;
+  phone: string | null;
+  administradora: string | null;
+  plan: Plan;
+  paid_seats: number;
+  billing_status: BillingStatus;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CondominioUsageStats {
+  condominio_id: string;
+  users_count: number;
+  occurrences_count: number;
+  tasks_count: number;
+  maintenance_items_count: number;
+  maintenance_records_count: number;
+  documents_count: number;
+  checklist_entries_count: number;
+  service_requests_count: number;
+  photos_count: number;
+  photos_bytes: number;
 }
 
 export type MaintenanceFrequency =
@@ -32,6 +65,11 @@ export interface MaintenanceItem {
   frequency: MaintenanceFrequency;
   next_due_date: string;
   notes: string | null;
+  location: string | null;
+  brand: string | null;
+  model: string | null;
+  serial_number: string | null;
+  assigned_to: string | null;
   created_by: string;
   created_at: string;
 }
@@ -55,6 +93,8 @@ export interface ChecklistTemplate {
   id: string;
   title: string;
   description: string | null;
+  frequency: MaintenanceFrequency;
+  assigned_to: string | null;
   active: boolean;
   created_by: string;
   created_at: string;
@@ -128,4 +168,28 @@ export interface PushToken {
   user_id: string;
   expo_push_token: string;
   created_at: string;
+}
+
+export type ServiceRequestStatus =
+  | 'aberta'
+  | 'orcamento_solicitado'
+  | 'orcado'
+  | 'aprovado'
+  | 'concluido'
+  | 'cancelado';
+
+export interface ServiceRequest {
+  id: string;
+  occurrence_id: string | null;
+  title: string;
+  category: string;
+  status: ServiceRequestStatus;
+  provider_name: string | null;
+  provider_contact: string | null;
+  quote_value: number | null;
+  notes: string | null;
+  photo_urls: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }

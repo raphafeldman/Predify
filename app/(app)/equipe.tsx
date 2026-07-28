@@ -1,14 +1,23 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ModalFormLayout } from '../../components/ModalFormLayout';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
+import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Profile, Role } from '../../lib/types';
+
+const isWeb = Platform.OS === 'web';
 
 export default function EquipeScreen() {
   const { profile: myProfile } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Profile | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('profiles').select('*').order('full_name');
@@ -30,32 +39,55 @@ export default function EquipeScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Equipe</Text>
+        <Pressable style={styles.newButton} onPress={() => setCreating(true)}>
+          <Ionicons name="add" size={16} color={colors.textOnPrimary} />
+          <Text style={styles.newButtonText}>Novo usuário</Text>
+        </Pressable>
+      </View>
+
+      {isWeb && (
+        <View style={[styles.row, styles.tableHeader]}>
+          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 2 }]}>Nome</Text>
+          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Papel</Text>
+          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Telefone</Text>
+          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Status</Text>
+        </View>
+      )}
+
       <FlatList
         data={profiles}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshing={loading}
         onRefresh={load}
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => setEditing(item)}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.full_name}</Text>
-              <Text style={styles.meta}>
+        renderItem={({ item }) =>
+          isWeb ? (
+            <Pressable style={styles.row} onPress={() => setEditing(item)}>
+              <Text style={[styles.tableCell, styles.tableCellStrong, { flex: 2 }]}>{item.full_name}</Text>
+              <Text style={[styles.tableCell, { flex: 1 }]}>
                 {item.role === 'sindico' ? 'Síndico' : 'Funcionário'}
-                {item.phone ? ` • ${item.phone}` : ''}
               </Text>
-            </View>
-            <View style={[styles.badge, item.active ? styles.badgeActive : styles.badgeBlocked]}>
-              <Text style={styles.badgeText}>{item.active ? 'Ativo' : 'Bloqueado'}</Text>
-            </View>
-          </Pressable>
-        )}
+              <Text style={[styles.tableCell, { flex: 1 }]}>{item.phone ?? '—'}</Text>
+              <View style={{ flex: 1 }}>
+                <Badge label={item.active ? 'Ativo' : 'Bloqueado'} color={item.active ? colors.success : colors.danger} />
+              </View>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.row} onPress={() => setEditing(item)}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{item.full_name}</Text>
+                <Text style={styles.meta}>
+                  {item.role === 'sindico' ? 'Síndico' : 'Funcionário'}
+                  {item.phone ? ` • ${item.phone}` : ''}
+                </Text>
+              </View>
+              <Badge label={item.active ? 'Ativo' : 'Bloqueado'} color={item.active ? colors.success : colors.danger} />
+            </Pressable>
+          )
+        }
       />
-
-      <Text style={styles.hint}>
-        Para cadastrar uma pessoa nova, use o painel do Supabase (Authentication → Add user).
-        Aqui você edita e bloqueia quem já existe.
-      </Text>
 
       <EditProfileModal
         profile={editing}
@@ -65,7 +97,128 @@ export default function EquipeScreen() {
           load();
         }}
       />
+
+      <NewUserModal
+        visible={creating}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          load();
+        }}
+      />
     </View>
+  );
+}
+
+function NewUserModal({
+  visible,
+  onClose,
+  onCreated,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [role, setRole] = useState<Role>('funcionario');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setFullName('');
+    setEmail('');
+    setPassword('');
+    setPhone('');
+    setRole('funcionario');
+    setError(null);
+  }
+
+  async function submit() {
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Preencha nome, e-mail e senha.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const { data, error: invokeError } = await supabase.functions.invoke('admin-users', {
+      body: {
+        full_name: fullName.trim(),
+        email: email.trim(),
+        password,
+        phone: phone.trim() || undefined,
+        role,
+      },
+    });
+    setSaving(false);
+
+    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    if (responseError) {
+      setError(responseError);
+      return;
+    }
+    reset();
+    onCreated();
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <ModalFormLayout style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>Novo usuário</Text>
+
+        <TextField label="Nome" value={fullName} onChangeText={setFullName} placeholder="Nome completo" />
+        <TextField
+          label="E-mail"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          placeholder="pessoa@email.com"
+        />
+        <TextField
+          label="Senha provisória"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          placeholder="mínimo 6 caracteres"
+        />
+        <TextField label="Telefone (opcional)" value={phone} onChangeText={setPhone} placeholder="(11) 90000-0000" />
+
+        <Text style={styles.label}>Papel</Text>
+        <View style={styles.optionsRow}>
+          {(['funcionario', 'sindico'] as Role[]).map((r) => (
+            <Pressable
+              key={r}
+              style={[styles.option, role === r && styles.optionActive]}
+              onPress={() => setRole(r)}
+            >
+              <Text style={[styles.optionText, role === r && styles.optionTextActive]}>
+                {r === 'sindico' ? 'Síndico' : 'Funcionário'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View style={styles.modalButtonsRow}>
+          <Button title="Cancelar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button title="Cadastrar" onPress={submit} loading={saving} style={styles.flex1} />
+        </View>
+
+        <Text style={styles.hint}>
+          Se aparecer erro dizendo que a função não foi encontrada, é porque o deploy da Edge Function ainda não foi
+          feito — veja o SETUP.md.
+        </Text>
+      </ModalFormLayout>
+    </Modal>
   );
 }
 
@@ -125,14 +278,11 @@ function EditProfileModal({
 
   return (
     <Modal visible={Boolean(profile)} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
+      <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Editar usuário</Text>
 
-        <Text style={styles.label}>Nome</Text>
-        <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
-
-        <Text style={styles.label}>Telefone</Text>
-        <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="(11) 90000-0000" />
+        <TextField label="Nome" value={fullName} onChangeText={setFullName} />
+        <TextField label="Telefone" value={phone} onChangeText={setPhone} placeholder="(11) 90000-0000" />
 
         <Text style={styles.label}>Papel</Text>
         <View style={styles.optionsRow}>
@@ -155,30 +305,34 @@ function EditProfileModal({
         {active ? (
           confirmingBlock ? (
             <View style={styles.confirmRow}>
-              <Text style={styles.confirmText}>Bloquear {profile.full_name}? Ela não vai conseguir mais entrar no app.</Text>
+              <Text style={styles.confirmText}>
+                Bloquear {profile.full_name}? Ela não vai conseguir mais entrar no app.
+              </Text>
               <View style={styles.confirmButtonsRow}>
-                <Pressable style={styles.cancelButton} onPress={() => setConfirmingBlock(false)}>
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.blockButton}
+                <Button
+                  title="Cancelar"
+                  variant="secondary"
+                  onPress={() => setConfirmingBlock(false)}
+                  style={styles.flex1}
+                />
+                <Button
+                  title="Confirmar bloqueio"
+                  variant="danger"
                   onPress={() => {
                     setActive(false);
                     setConfirmingBlock(false);
                   }}
-                >
-                  <Text style={styles.blockButtonText}>Confirmar bloqueio</Text>
-                </Pressable>
+                  style={styles.flex1}
+                />
               </View>
             </View>
           ) : (
-            <Pressable
-              style={styles.blockButton}
+            <Button
+              title="Bloquear usuário"
+              variant="danger"
               onPress={() => (isSelf ? null : setConfirmingBlock(true))}
               disabled={isSelf}
-            >
-              <Text style={styles.blockButtonText}>Bloquear usuário</Text>
-            </Pressable>
+            />
           )
         ) : (
           <Pressable style={styles.unblockButton} onPress={() => setActive(true)}>
@@ -190,88 +344,70 @@ function EditProfileModal({
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.modalButtonsRow}>
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Fechar</Text>
-          </Pressable>
-          <Pressable style={styles.saveButton} onPress={save} disabled={saving}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Salvar</Text>}
-          </Pressable>
+          <Button title="Fechar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button title="Salvar" onPress={save} loading={saving} style={styles.flex1} />
         </View>
-      </View>
+      </ModalFormLayout>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  restricted: { textAlign: 'center', marginTop: 40, color: '#9CA3AF' },
-  listContent: { padding: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  restricted: { textAlign: 'center', marginTop: 40, fontFamily: fontFamily.regular, color: colors.textMuted },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  title: { fontFamily: fontFamily.bold, fontSize: fontSize.lg, color: colors.textPrimary },
+  newButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  newButtonText: { fontFamily: fontFamily.bold, color: colors.textOnPrimary, fontSize: fontSize.sm },
+  listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  tableHeader: { borderBottomWidth: 2, borderBottomColor: colors.border, paddingVertical: spacing.sm },
+  tableHeaderText: { fontFamily: fontFamily.bold, color: colors.textSecondary, fontSize: fontSize.xs, textTransform: 'uppercase' },
+  tableCell: { fontFamily: fontFamily.regular, fontSize: fontSize.md, color: colors.textSecondary },
+  tableCellStrong: { fontFamily: fontFamily.semibold, color: colors.textPrimary },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
-  name: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  meta: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  badgeActive: { backgroundColor: '#ECFDF5' },
-  badgeBlocked: { backgroundColor: '#FEF2F2' },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#374151' },
-  hint: { padding: 16, fontSize: 12, color: '#9CA3AF', textAlign: 'center' },
-  modalContainer: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fff' },
-  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#111827' },
-  label: { fontSize: 13, color: '#374151', marginTop: 12, marginBottom: 4 },
-  hintSmall: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-  },
-  optionsRow: { flexDirection: 'row', gap: 8 },
-  option: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  optionActive: { backgroundColor: '#1F6FEB', borderColor: '#1F6FEB' },
-  optionText: { color: '#374151', fontWeight: '600', fontSize: 13 },
-  optionTextActive: { color: '#fff' },
-  blockButton: {
-    borderWidth: 1,
-    borderColor: '#DC2626',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  blockButtonText: { color: '#DC2626', fontWeight: '600' },
+  name: { fontFamily: fontFamily.semibold, fontSize: fontSize.base, color: colors.textPrimary },
+  meta: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  hint: { marginTop: spacing.lg, fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, textAlign: 'center' },
+  modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
+  modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
+  label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
+  hintSmall: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
+  optionsRow: { flexDirection: 'row', gap: spacing.sm },
+  option: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
+  optionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  optionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
+  optionTextActive: { color: colors.textOnPrimary },
   unblockButton: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
-    paddingVertical: 10,
+    backgroundColor: colors.successLight,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
     alignItems: 'center',
   },
-  unblockButtonText: { color: '#059669', fontWeight: '600' },
-  confirmRow: { backgroundColor: '#FEF2F2', borderRadius: 8, padding: 12, gap: 10 },
-  confirmText: { color: '#991B1B', fontSize: 13 },
-  confirmButtonsRow: { flexDirection: 'row', gap: 10 },
-  error: { color: '#DC2626', marginTop: 12, fontSize: 13 },
-  modalButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  cancelButtonText: { color: '#374151', fontWeight: '600' },
-  saveButton: {
-    flex: 1,
-    backgroundColor: '#1F6FEB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  saveButtonText: { color: '#fff', fontWeight: '700' },
+  unblockButtonText: { fontFamily: fontFamily.semibold, color: '#15803D' },
+  confirmRow: { backgroundColor: colors.dangerLight, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+  confirmText: { fontFamily: fontFamily.medium, color: '#991B1B', fontSize: fontSize.sm },
+  confirmButtonsRow: { flexDirection: 'row', gap: spacing.sm },
+  error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  modalButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
+  flex1: { flex: 1 },
 });

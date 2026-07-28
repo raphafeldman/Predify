@@ -5,27 +5,64 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Logo } from '../../components/ui/Logo';
 import { TextField } from '../../components/ui/TextField';
-import { useAuth } from '../../lib/auth-context';
+import { supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, spacing } from '../../lib/theme';
 
-export default function LoginScreen() {
+export default function SignupScreen() {
   const router = useRouter();
-  const { signIn, blockedMessage } = useAuth();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
   async function handleSubmit() {
-    if (!email || !password) {
-      setError('Preencha e-mail e senha.');
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Preencha nome, e-mail e senha.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('A senha precisa ter pelo menos 6 caracteres.');
       return;
     }
     setError(null);
     setSubmitting(true);
-    const { error: signInError } = await signIn(email.trim(), password);
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { full_name: fullName.trim() } },
+    });
     setSubmitting(false);
-    if (signInError) setError(signInError);
+
+    if (signUpError) {
+      setError(traduzErro(signUpError.message));
+      return;
+    }
+
+    // Se o projeto exige confirmação de e-mail, ainda não vem sessão ativa
+    // aqui — a pessoa confirma pelo link recebido e depois entra normalmente.
+    // Se não exige, o login acontece sozinho (o app reage à sessão nova).
+    if (!data.session) {
+      setPendingConfirmation(true);
+    }
+  }
+
+  if (pendingConfirmation) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Logo size="lg" showWordmark={false} />
+            <Text style={styles.title}>Confirme seu e-mail</Text>
+            <Text style={styles.subtitle}>
+              Enviamos um link de confirmação para {email.trim()}. Depois de confirmar, volte e entre normalmente.
+            </Text>
+          </View>
+          <Button title="Voltar para o login" onPress={() => router.replace('/login')} />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -33,13 +70,12 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Logo size="lg" showWordmark={false} />
-          <Text style={styles.title}>Zelo</Text>
-          <Text style={styles.subtitle}>Gestão de condomínio, do jeito simples</Text>
+          <Text style={styles.title}>Criar conta</Text>
+          <Text style={styles.subtitle}>Depois de criar sua conta, você cadastra seu condomínio e vira o síndico dele.</Text>
         </View>
 
-        {blockedMessage ? <Text style={styles.blocked}>{blockedMessage}</Text> : null}
-
         <Card style={styles.card}>
+          <TextField label="Nome" value={fullName} onChangeText={setFullName} placeholder="Seu nome completo" />
           <TextField
             label="E-mail"
             value={email}
@@ -54,23 +90,27 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            placeholder="••••••••"
+            placeholder="mínimo 6 caracteres"
           />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <Button title="Entrar" onPress={handleSubmit} loading={submitting} style={styles.button} />
+          <Button title="Criar conta" onPress={handleSubmit} loading={submitting} style={styles.button} />
         </Card>
 
-        <Pressable onPress={() => router.push('/signup')}>
-          <Text style={styles.hint}>Ainda não tem condomínio cadastrado? Criar conta</Text>
+        <Pressable onPress={() => router.replace('/login')}>
+          <Text style={styles.hint}>Já tem conta? Entrar</Text>
         </Pressable>
-        <Text style={styles.hintSmall}>
-          Se seu síndico já te cadastrou, é só entrar com o e-mail e a senha que ele criou.
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
+}
+
+function traduzErro(message: string) {
+  if (message.includes('already registered') || message.includes('already exists')) {
+    return 'Já existe uma conta com esse e-mail.';
+  }
+  return message;
 }
 
 const styles = StyleSheet.create({
@@ -97,29 +137,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontSize: fontSize.sm,
   },
-  blocked: {
-    fontFamily: fontFamily.medium,
-    color: colors.danger,
-    backgroundColor: colors.dangerLight,
-    borderRadius: 10,
-    padding: spacing.md,
-    fontSize: fontSize.sm,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
   button: { marginTop: spacing.xl },
   hint: {
-    fontFamily: fontFamily.semibold,
-    textAlign: 'center',
-    color: colors.primary,
-    marginTop: spacing['2xl'],
-    fontSize: fontSize.sm,
-  },
-  hintSmall: {
     fontFamily: fontFamily.regular,
     textAlign: 'center',
     color: colors.textMuted,
-    marginTop: spacing.sm,
-    fontSize: fontSize.xs,
+    marginTop: spacing['2xl'],
+    fontSize: fontSize.sm,
   },
 });

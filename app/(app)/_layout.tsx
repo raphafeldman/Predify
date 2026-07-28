@@ -2,12 +2,13 @@ import { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Slot, Tabs } from 'expo-router';
 import { ActivityIndicator, Platform, View } from 'react-native';
+import { CreateCondominioScreen } from '../../components/CreateCondominioScreen';
 import { Sidebar } from '../../components/Sidebar';
 import { useAuth } from '../../lib/auth-context';
 import { registerForPushNotificationsAsync } from '../../lib/notifications';
 
 export default function AppLayout() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, isPlatformAdmin, loading } = useAuth();
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -27,6 +28,10 @@ export default function AppLayout() {
     return <Redirect href="/login" />;
   }
 
+  if (!isPlatformAdmin && profile && !profile.condominio_id) {
+    return <CreateCondominioScreen />;
+  }
+
   if (Platform.OS === 'web') {
     return (
       <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -43,7 +48,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: profile?.role === 'sindico' ? 'Painel' : 'Rotina',
+          title: isPlatformAdmin ? 'Administração' : profile?.role === 'sindico' ? 'Painel' : 'Rotina',
           tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
         }}
       />
@@ -83,6 +88,12 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="historico" options={{ href: null, title: 'Histórico' }} />
       <Tabs.Screen name="equipe" options={{ href: null, title: 'Equipe' }} />
+      <Tabs.Screen name="equipamentos" options={{ href: null, title: 'Equipamentos' }} />
+      <Tabs.Screen name="rotinas" options={{ href: null, title: 'Rotinas' }} />
+      <Tabs.Screen name="relatorios" options={{ href: null, title: 'Relatórios' }} />
+      <Tabs.Screen name="prestadores" options={{ href: null, title: 'Prestadores' }} />
+      <Tabs.Screen name="admin" options={{ href: null, title: 'Administração' }} />
+      <Tabs.Screen name="admin-condominio" options={{ href: null, title: 'Condomínio' }} />
     </Tabs>
   );
 }

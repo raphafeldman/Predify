@@ -1,21 +1,21 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DashboardSummary } from '../../components/DashboardSummary';
+import { DateInput } from '../../components/DateInput';
+import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
+import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/TextField';
+import { AdminPanel } from './admin';
 import { useAuth } from '../../lib/auth-context';
+import { FREQUENCY_LABEL, getPeriodKey } from '../../lib/frequency';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type {
   ChecklistEntry,
   ChecklistTemplate,
@@ -27,8 +27,9 @@ import type {
 } from '../../lib/types';
 
 export default function HomeScreen() {
-  const { profile } = useAuth();
+  const { profile, isPlatformAdmin } = useAuth();
 
+  if (isPlatformAdmin) return <AdminPanel />;
   if (!profile) return null;
 
   return profile.role === 'sindico' ? <SindicoHome /> : <FuncionarioHome />;
@@ -39,7 +40,7 @@ export default function HomeScreen() {
 // ============================================================
 
 function FuncionarioHome() {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [entries, setEntries] = useState<ChecklistEntry[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -50,30 +51,52 @@ function FuncionarioHome() {
   const today = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
-    const [templatesRes, entriesRes, tasksRes, occRes] = await Promise.all([
+    const [templatesRes, tasksRes, occRes] = await Promise.all([
       supabase.from('checklist_templates').select('*').eq('active', true).order('title'),
-      supabase.from('checklist_entries').select('*').eq('entry_date', today),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(50),
       supabase.from('occurrences').select('id', { count: 'exact', head: true }).eq('status', 'aberta'),
     ]);
-    if (templatesRes.data) setTemplates(templatesRes.data as ChecklistTemplate[]);
-    if (entriesRes.data) setEntries(entriesRes.data as ChecklistEntry[]);
+
+    const myTemplates = ((templatesRes.data as ChecklistTemplate[]) ?? []).filter(
+      (t) => !t.assigned_to || t.assigned_to === session?.user.id
+    );
+    setTemplates(myTemplates);
+
+    if (myTemplates.length > 0) {
+      const { data: entriesData } = await supabase
+        .from('checklist_entries')
+        .select('*')
+        .in(
+          'template_id',
+          myTemplates.map((t) => t.id)
+        );
+      setEntries((entriesData as ChecklistEntry[]) ?? []);
+    } else {
+      setEntries([]);
+    }
+
     if (tasksRes.data) setTasks(tasksRes.data as Task[]);
     setOpenOccurrences(occRes.count ?? 0);
     setLoading(false);
-  }, [today]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function toggleChecklist(templateId: string) {
-    const current = entries.find((e) => e.template_id === templateId);
+  function entryFor(template: ChecklistTemplate) {
+    const periodKey = getPeriodKey(template.frequency);
+    return entries.find((e) => e.template_id === template.id && e.entry_date === periodKey);
+  }
+
+  async function toggleChecklist(template: ChecklistTemplate) {
+    const periodKey = getPeriodKey(template.frequency);
+    const current = entryFor(template);
     const nextDone = !current?.done;
     await supabase.from('checklist_entries').upsert(
       {
-        template_id: templateId,
-        entry_date: today,
+        template_id: template.id,
+        entry_date: periodKey,
         done: nextDone,
         done_by: session?.user.id ?? null,
         done_at: nextDone ? new Date().toISOString() : null,
@@ -83,16 +106,17 @@ function FuncionarioHome() {
     load();
   }
 
-  async function saveChecklistDetails(templateId: string, notes: string, newPhotoUris: string[]) {
-    if (!session) return;
-    const current = entries.find((e) => e.template_id === templateId);
+  async function saveChecklistDetails(template: ChecklistTemplate, notes: string, newPhotoUris: string[]) {
+    if (!session || !profile) return;
+    const periodKey = getPeriodKey(template.frequency);
+    const current = entryFor(template);
     const uploadedPaths = newPhotoUris.length
-      ? await uploadPhotos(newPhotoUris, 'checklist', session.user.id)
+      ? await uploadPhotos(newPhotoUris, 'checklist', session.user.id, profile.condominio_id)
       : [];
     await supabase.from('checklist_entries').upsert(
       {
-        template_id: templateId,
-        entry_date: today,
+        template_id: template.id,
+        entry_date: periodKey,
         notes: notes.trim() || null,
         photo_urls: [...(current?.photo_urls ?? []), ...uploadedPaths],
       },
@@ -113,7 +137,7 @@ function FuncionarioHome() {
     load();
   }
 
-  const doneCount = entries.filter((e) => e.done).length;
+  const doneCount = templates.filter((t) => entryFor(t)?.done).length;
   const myTasks = tasks.filter(
     (t) => t.assigned_to === session?.user.id || t.created_by === session?.user.id
   );
@@ -137,27 +161,23 @@ function FuncionarioHome() {
           <>
             <DashboardSummary
               stats={[
-                { label: 'Rotina concluída', value: `${doneCount}/${templates.length}`, color: '#1F6FEB' },
-                { label: 'Tarefas pendentes', value: String(pendingCount), color: '#F59E0B' },
-                { label: 'Ocorrências abertas', value: String(openOccurrences), color: '#DC2626' },
+                { label: 'Rotina concluída', value: `${doneCount}/${templates.length}`, color: colors.primary },
+                { label: 'Tarefas pendentes', value: String(pendingCount), color: colors.warning },
+                { label: 'Ocorrências abertas', value: String(openOccurrences), color: colors.danger },
               ]}
             />
 
             <Text style={styles.sectionTitle}>Rotina de hoje</Text>
             {templates.length === 0 && !loading && (
-              <Text style={styles.empty}>
-                O síndico ainda não cadastrou itens de rotina.
-              </Text>
+              <Text style={styles.empty}>O síndico ainda não cadastrou itens de rotina.</Text>
             )}
             {templates.map((template) => (
               <ChecklistItemRow
                 key={template.id}
                 template={template}
-                entry={entries.find((e) => e.template_id === template.id)}
-                onToggle={() => toggleChecklist(template.id)}
-                onSaveDetails={(notes, photos) =>
-                  saveChecklistDetails(template.id, notes, photos)
-                }
+                entry={entryFor(template)}
+                onToggle={() => toggleChecklist(template)}
+                onSaveDetails={(notes, photos) => saveChecklistDetails(template, notes, photos)}
               />
             ))}
 
@@ -167,9 +187,7 @@ function FuncionarioHome() {
                 <Text style={styles.addLink}>+ Nova tarefa</Text>
               </Pressable>
             </View>
-            {tasks.length === 0 && !loading && (
-              <Text style={styles.empty}>Nenhuma tarefa registrada.</Text>
-            )}
+            {tasks.length === 0 && !loading && <Text style={styles.empty}>Nenhuma tarefa registrada.</Text>}
             {sortedTasks.map((task) => (
               <RecordCard
                 key={task.id}
@@ -179,16 +197,14 @@ function FuncionarioHome() {
                 subtitle={new Date(task.created_at).toLocaleString('pt-BR')}
                 badge={{
                   label: task.status === 'concluida' ? 'Concluída' : 'Pendente',
-                  color: task.status === 'concluida' ? '#10B981' : '#F59E0B',
+                  color: task.status === 'concluida' ? colors.success : colors.warning,
                 }}
                 photoPaths={task.photo_urls}
               >
                 {task.assigned_to === session?.user.id && task.scheduled_for === today && (
                   <Text style={styles.scheduledBadge}>📅 Agendada para hoje, pelo síndico</Text>
                 )}
-                {task.description ? (
-                  <Text style={styles.description}>{task.description}</Text>
-                ) : null}
+                {task.description ? <Text style={styles.description}>{task.description}</Text> : null}
                 <Pressable style={styles.toggleTaskButton} onPress={() => toggleTask(task)}>
                   <Text style={styles.toggleTaskButtonText}>
                     {task.status === 'concluida' ? 'Reabrir' : 'Marcar como concluída'}
@@ -247,10 +263,13 @@ function ChecklistItemRow({
       <View style={styles.checklistRow}>
         <Pressable onPress={onToggle} style={styles.checklistTouchArea}>
           <View style={[styles.checkbox, entry?.done && styles.checkboxChecked]}>
-            {entry?.done ? <Text style={styles.checkboxMark}>✓</Text> : null}
+            {entry?.done ? <Ionicons name="checkmark" size={15} color={colors.textOnPrimary} /> : null}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.checklistTitle}>{template.title}</Text>
+            <View style={styles.checklistTitleRow}>
+              <Text style={styles.checklistTitle}>{template.title}</Text>
+              <Text style={styles.checklistFrequencyBadge}>{FREQUENCY_LABEL[template.frequency]}</Text>
+            </View>
             {template.description ? (
               <Text style={styles.checklistDescription}>{template.description}</Text>
             ) : null}
@@ -268,30 +287,18 @@ function ChecklistItemRow({
           {entry?.photo_urls && entry.photo_urls.length > 0 && (
             <View style={styles.existingPhotosRow}>
               {entry.photo_urls.map((path) => (
-                <AttachmentPreview
-                  key={path}
-                  path={path}
-                  mimeType="image/jpeg"
-                  style={styles.existingPhoto}
-                />
+                <AttachmentPreview key={path} path={path} mimeType="image/jpeg" style={styles.existingPhoto} />
               ))}
             </View>
           )}
-          <TextInput
-            style={styles.detailsInput}
-            placeholder="Observação (opcional)"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-          />
+          <TextField placeholder="Observação (opcional)" value={notes} onChangeText={setNotes} multiline />
           <PhotoPicker uris={newPhotos} onChange={setNewPhotos} />
-          <Pressable style={styles.saveDetailsButton} onPress={save} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.saveDetailsButtonText}>Salvar observação</Text>
-            )}
-          </Pressable>
+          <Button
+            title="Salvar observação"
+            onPress={save}
+            loading={saving}
+            style={styles.saveDetailsButton}
+          />
         </View>
       )}
     </View>
@@ -309,7 +316,7 @@ function NewTaskModal({
   onCreated: () => void;
   funcionarios?: Profile[];
 }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
@@ -328,19 +335,21 @@ function NewTaskModal({
   }
 
   async function submit() {
-    if (!session) return;
+    if (!session || !profile) return;
     if (!title.trim()) {
       setError('Dê um título para a tarefa.');
       return;
     }
     if (scheduledFor && !/^\d{4}-\d{2}-\d{2}$/.test(scheduledFor)) {
-      setError('Data deve estar no formato AAAA-MM-DD.');
+      setError('Data inválida.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const photoPaths = photos.length ? await uploadPhotos(photos, 'tasks', session.user.id) : [];
+      const photoPaths = photos.length
+        ? await uploadPhotos(photos, 'tasks', session.user.id, profile.condominio_id)
+        : [];
       const { error: insertError } = await supabase.from('tasks').insert({
         title: title.trim(),
         description: description.trim() || null,
@@ -361,22 +370,12 @@ function NewTaskModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>
-          {funcionarios ? 'Agendar tarefa' : 'Nova tarefa'}
-        </Text>
+      <ModalFormLayout style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>{funcionarios ? 'Agendar tarefa' : 'Nova tarefa'}</Text>
 
-        <Text style={styles.label}>Título</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Ex: Limpeza do salão de festas"
-        />
-
-        <Text style={styles.label}>Descrição (opcional)</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
+        <TextField label="Título" value={title} onChangeText={setTitle} placeholder="Ex: Limpeza do salão de festas" />
+        <TextField
+          label="Descrição (opcional)"
           value={description}
           onChangeText={setDescription}
           placeholder="Detalhes da tarefa"
@@ -390,31 +389,18 @@ function NewTaskModal({
               {funcionarios.map((f) => (
                 <Pressable
                   key={f.id}
-                  style={[
-                    styles.categoryOption,
-                    assignedTo === f.id && styles.categoryOptionActive,
-                  ]}
+                  style={[styles.categoryOption, assignedTo === f.id && styles.categoryOptionActive]}
                   onPress={() => setAssignedTo(assignedTo === f.id ? null : f.id)}
                 >
-                  <Text
-                    style={[
-                      styles.categoryOptionText,
-                      assignedTo === f.id && styles.categoryOptionTextActive,
-                    ]}
-                  >
+                  <Text style={[styles.categoryOptionText, assignedTo === f.id && styles.categoryOptionTextActive]}>
                     {f.full_name}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            <Text style={styles.label}>Data agendada (opcional, AAAA-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={scheduledFor}
-              onChangeText={setScheduledFor}
-              placeholder="2026-08-01"
-            />
+            <Text style={styles.label}>Data agendada (opcional)</Text>
+            <DateInput value={scheduledFor} onChangeISO={setScheduledFor} />
           </>
         )}
 
@@ -424,18 +410,10 @@ function NewTaskModal({
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.modalButtonsRow}>
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </Pressable>
-          <Pressable style={styles.saveButton} onPress={submit} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.saveButtonText}>Salvar</Text>
-            )}
-          </Pressable>
+          <Button title="Cancelar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
-      </View>
+      </ModalFormLayout>
     </Modal>
   );
 }
@@ -560,7 +538,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
         subtitle={new Date(o.created_at).toLocaleString('pt-BR')}
         badge={{
           label: o.status === 'aberta' ? 'Ocorrência aberta' : 'Ocorrência resolvida',
-          color: o.status === 'aberta' ? '#DC2626' : '#6B7280',
+          color: o.status === 'aberta' ? colors.danger : colors.textMuted,
         }}
         photoPaths={o.photo_urls}
       >
@@ -579,7 +557,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
         subtitle={new Date(t.created_at).toLocaleString('pt-BR')}
         badge={{
           label: t.status === 'concluida' ? 'Tarefa concluída' : 'Tarefa pendente',
-          color: t.status === 'concluida' ? '#10B981' : '#F59E0B',
+          color: t.status === 'concluida' ? colors.success : colors.warning,
         }}
         photoPaths={t.photo_urls}
       >
@@ -601,7 +579,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
         recordId={m.id}
         title={`🔧 Manutenção ${m.type === 'preventiva' ? 'preventiva' : 'corretiva'}`}
         subtitle={new Date(m.created_at).toLocaleString('pt-BR')}
-        badge={{ label: m.status, color: '#1F6FEB' }}
+        badge={{ label: m.status, color: colors.primary }}
         photoPaths={m.photo_urls}
       >
         <Text style={styles.description}>{m.description}</Text>
@@ -617,7 +595,7 @@ export function FeedCard({ item }: { item: FeedItem }) {
       title={`📄 ${d.title}`}
       subtitle={`${d.category} • ${new Date(d.created_at).toLocaleString('pt-BR')}`}
     >
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: spacing.sm }}>
         <AttachmentPreview
           path={d.file_url}
           mimeType={d.mime_type}
@@ -630,110 +608,83 @@ export function FeedCard({ item }: { item: FeedItem }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  listContent: { padding: 16, paddingBottom: 40 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 10 },
+  container: { flex: 1, backgroundColor: colors.background },
+  listContent: { padding: spacing.lg, paddingBottom: spacing['3xl'] },
+  sectionTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: fontSize.lg,
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 10,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
   },
-  addLink: { color: '#1F6FEB', fontWeight: '600', fontSize: 13 },
-  empty: { color: '#9CA3AF', marginBottom: 8 },
-  checklistItem: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  checklistTouchArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addLink: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.sm },
+  empty: { fontFamily: fontFamily.regular, color: colors.textMuted, marginBottom: spacing.sm },
+  checklistItem: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  checklistTouchArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 6,
+    borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#10B981', borderColor: '#10B981' },
-  checkboxMark: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  checklistTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  checklistDescription: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  detailsToggle: { paddingHorizontal: 8, paddingVertical: 4 },
-  detailsToggleText: { fontSize: 12, color: '#1F6FEB', fontWeight: '600' },
-  checklistDetails: { paddingBottom: 14, gap: 10 },
-  existingPhotosRow: { flexDirection: 'row', gap: 6 },
-  existingPhoto: { width: 56, height: 56, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  detailsInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    minHeight: 50,
-    textAlignVertical: 'top',
+  checkboxChecked: { backgroundColor: colors.success, borderColor: colors.success },
+  checklistTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  checklistTitle: { fontFamily: fontFamily.semibold, fontSize: fontSize.base, color: colors.textPrimary },
+  checklistFrequencyBadge: {
+    fontFamily: fontFamily.bold,
+    fontSize: 10,
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    textTransform: 'uppercase',
   },
-  saveDetailsButton: {
-    backgroundColor: '#1F6FEB',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-  },
-  saveDetailsButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  description: { fontSize: 14, color: '#374151', marginTop: 8 },
-  scheduledBadge: { fontSize: 12, color: '#1F6FEB', fontWeight: '600', marginTop: 8 },
-  feedAttachment: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  checklistDescription: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
+  detailsToggle: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  detailsToggleText: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, color: colors.primary },
+  checklistDetails: { paddingBottom: spacing.lg, gap: spacing.sm },
+  existingPhotosRow: { flexDirection: 'row', gap: spacing.sm },
+  existingPhoto: { width: 56, height: 56, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  saveDetailsButton: { alignSelf: 'flex-start', paddingHorizontal: spacing.lg },
+  description: { fontFamily: fontFamily.regular, fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.sm },
+  scheduledBadge: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, color: colors.primary, marginTop: spacing.sm },
+  feedAttachment: { width: 80, height: 80, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   toggleTaskButton: {
-    marginTop: 10,
+    marginTop: spacing.sm,
     alignSelf: 'flex-start',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.sm,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm,
   },
-  toggleTaskButtonText: { color: '#1F6FEB', fontWeight: '600', fontSize: 12 },
-  modalContainer: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fff' },
-  modalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#111827' },
-  label: { fontSize: 13, color: '#374151', marginTop: 12, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-  },
-  textArea: { minHeight: 90, textAlignVertical: 'top' },
-  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  toggleTaskButtonText: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.xs },
+  modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
+  modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
+  label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
+  categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   categoryOption: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
   },
-  categoryOptionActive: { backgroundColor: '#1F6FEB', borderColor: '#1F6FEB' },
-  categoryOptionText: { color: '#374151', fontSize: 13, fontWeight: '600' },
-  categoryOptionTextActive: { color: '#fff' },
-  error: { color: '#DC2626', marginTop: 12, fontSize: 13 },
-  modalButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  cancelButtonText: { color: '#374151', fontWeight: '600' },
-  saveButton: {
-    flex: 1,
-    backgroundColor: '#1F6FEB',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  saveButtonText: { color: '#fff', fontWeight: '700' },
+  categoryOptionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  categoryOptionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
+  categoryOptionTextActive: { color: colors.textOnPrimary },
+  error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  modalButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
+  flex1: { flex: 1 },
 });

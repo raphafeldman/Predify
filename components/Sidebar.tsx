@@ -2,56 +2,68 @@ import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../lib/auth-context';
+import { colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
+import { Logo } from './ui/Logo';
 
 interface NavItem {
   href: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   sindicoOnly?: boolean;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Início', icon: 'home' },
   { href: '/ocorrencias', label: 'Ocorrências', icon: 'alert-circle' },
+  { href: '/prestadores', label: 'Prestadores', icon: 'briefcase' },
+  { href: '/equipamentos', label: 'Equipamentos', icon: 'hardware-chip' },
   { href: '/manutencao', label: 'Manutenção', icon: 'construct' },
+  { href: '/rotinas', label: 'Rotinas', icon: 'repeat', sindicoOnly: true },
   { href: '/documentos', label: 'Documentos', icon: 'document-text' },
+  { href: '/relatorios', label: 'Relatórios', icon: 'bar-chart', sindicoOnly: true },
   { href: '/historico', label: 'Histórico', icon: 'time' },
   { href: '/equipe', label: 'Equipe', icon: 'people', sindicoOnly: true },
+  { href: '/admin', label: 'Administração', icon: 'shield-checkmark', adminOnly: true },
   { href: '/perfil', label: 'Perfil', icon: 'person' },
 ];
 
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, signOut } = useAuth();
+  const { profile, isPlatformAdmin, signOut } = useAuth();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Gestão do Condomínio</Text>
+      <View style={styles.logoRow}>
+        <Logo />
+      </View>
 
       <View style={styles.nav}>
-        {NAV_ITEMS.filter((item) => !item.sindicoOnly || profile?.role === 'sindico').map(
-          (item) => {
-            const active = pathname === item.href;
-            return (
-              <Pressable
-                key={item.href}
-                style={[styles.navItem, active && styles.navItemActive]}
-                onPress={() => router.push(item.href as never)}
-              >
-                <Ionicons name={item.icon} size={18} color={active ? '#1F6FEB' : '#6B7280'} />
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          }
-        )}
+        {NAV_ITEMS.filter((item) => {
+          if (item.adminOnly) return isPlatformAdmin;
+          if (isPlatformAdmin) return item.href === '/' || item.href === '/perfil';
+          return !item.sindicoOnly || profile?.role === 'sindico';
+        }).map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Pressable
+              key={item.href}
+              style={[styles.navItem, active && styles.navItemActive]}
+              onPress={() => router.push(item.href as never)}
+            >
+              <Ionicons name={item.icon} size={18} color={active ? colors.primary : colors.textSecondary} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.userName}>{profile?.full_name}</Text>
-        <Text style={styles.userRole}>{profile?.role === 'sindico' ? 'Síndico' : 'Funcionário'}</Text>
+        <Text style={styles.userName}>{profile?.full_name ?? 'Administrador da plataforma'}</Text>
+        <Text style={styles.userRole}>
+          {isPlatformAdmin ? 'Admin da plataforma' : profile?.role === 'sindico' ? 'Síndico' : 'Funcionário'}
+        </Text>
         <Pressable onPress={signOut}>
           <Text style={styles.signOut}>Sair</Text>
         </Pressable>
@@ -62,29 +74,29 @@ export function Sidebar() {
 
 const styles = StyleSheet.create({
   container: {
-    width: 220,
+    width: 232,
     borderRightWidth: 1,
-    borderRightColor: '#E5E7EB',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
+    borderRightColor: colors.border,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surfaceAlt,
     justifyContent: 'space-between',
   },
-  title: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 24 },
-  nav: { gap: 4 },
+  logoRow: { marginBottom: spacing.xl, paddingHorizontal: spacing.xs },
+  nav: { gap: 2 },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
   },
-  navItemActive: { backgroundColor: '#EFF6FF' },
-  navLabel: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
-  navLabelActive: { color: '#1F6FEB' },
-  footer: { borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 16 },
-  userName: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  userRole: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  signOut: { fontSize: 13, color: '#DC2626', fontWeight: '600', marginTop: 10 },
+  navItemActive: { backgroundColor: colors.primaryLight },
+  navLabel: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary },
+  navLabelActive: { color: colors.primary },
+  footer: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.lg },
+  userName: { fontFamily: fontFamily.bold, fontSize: fontSize.sm, color: colors.textPrimary },
+  userRole: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
+  signOut: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.danger, marginTop: spacing.md },
 });

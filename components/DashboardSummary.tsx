@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
 
 interface Stat {
   label: string;
@@ -10,7 +11,8 @@ export function DashboardSummary({ stats }: { stats: Stat[] }) {
   return (
     <View style={styles.row}>
       {stats.map((stat) => (
-        <View key={stat.label} style={[styles.card, { borderColor: stat.color }]}>
+        <View key={stat.label} style={styles.card}>
+          <View style={[styles.dot, { backgroundColor: stat.color }]} />
           <Text style={[styles.value, { color: stat.color }]}>{stat.value}</Text>
           <Text style={styles.label}>{stat.label}</Text>
         </View>
@@ -20,16 +22,17 @@ export function DashboardSummary({ stats }: { stats: Stat[] }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.xl },
   card: {
     flexGrow: 1,
-    minWidth: 100,
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: '#fff',
+    minWidth: 104,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface,
+    ...cardShadow,
   },
-  value: { fontSize: 22, fontWeight: '700' },
-  label: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginBottom: spacing.sm },
+  value: { fontFamily: fontFamily.extrabold, fontSize: fontSize['2xl'] },
+  label: { fontFamily: fontFamily.medium, fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
 });

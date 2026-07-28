@@ -1,6 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { RecordType } from '../lib/types';
+import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
+import { Badge } from './ui/Badge';
 import { CommentsThread } from './CommentsThread';
 import { RemoteImage } from './RemoteImage';
 
@@ -29,11 +32,7 @@ export function RecordCard({
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>{title}</Text>
-        {badge && (
-          <View style={[styles.badge, { backgroundColor: badge.color }]}>
-            <Text style={styles.badgeText}>{badge.label}</Text>
-          </View>
-        )}
+        {badge && <Badge label={badge.label} color={badge.color} />}
       </View>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       {children}
@@ -46,7 +45,8 @@ export function RecordCard({
         </ScrollView>
       )}
 
-      <Pressable onPress={() => setShowComments((v) => !v)}>
+      <Pressable style={styles.commentsToggleRow} onPress={() => setShowComments((v) => !v)}>
+        <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.primary} />
         <Text style={styles.commentsToggle}>
           {showComments ? 'Ocultar comentários' : 'Comentários'}
         </Text>
@@ -59,19 +59,28 @@ export function RecordCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...cardShadow,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  title: { fontSize: 16, fontWeight: '700', flex: 1, marginRight: 8, color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  photosRow: { marginTop: 10 },
-  photo: { width: 64, height: 64, borderRadius: 8, marginRight: 6, backgroundColor: '#F3F4F6' },
-  commentsToggle: { marginTop: 10, color: '#1F6FEB', fontSize: 13, fontWeight: '600' },
+  title: {
+    fontFamily: fontFamily.semibold,
+    fontSize: fontSize.md,
+    flex: 1,
+    marginRight: spacing.sm,
+    color: colors.textPrimary,
+  },
+  subtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  photosRow: { marginTop: spacing.md },
+  photo: { width: 64, height: 64, borderRadius: radius.md, marginRight: spacing.sm, backgroundColor: colors.surfaceAlt },
+  commentsToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
+  commentsToggle: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.sm },
 });

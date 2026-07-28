@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { supabase } from '../../lib/supabase';
+import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { DocumentItem, MaintenanceRecord, Occurrence, Task } from '../../lib/types';
 import { FeedCard, type FeedItem } from './index';
 
@@ -134,7 +136,7 @@ export default function HistoricoScreen() {
           </>
         }
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Nada encontrado para esse filtro.</Text> : null
+          !loading ? <EmptyState icon="time-outline" title="Nada encontrado para esse filtro" /> : null
         }
         renderItem={({ item }) => <FeedCard item={item} />}
       />
@@ -143,19 +145,19 @@ export default function HistoricoScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  listContent: { padding: 16, paddingBottom: 40 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 12 },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  container: { flex: 1, backgroundColor: colors.background },
+  listContent: { padding: spacing.lg, paddingBottom: spacing['3xl'] },
+  sectionTitle: { fontFamily: fontFamily.bold, fontSize: fontSize.lg, color: colors.textPrimary, marginBottom: spacing.md },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
   filterChip: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
     paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
   },
-  filterChipActive: { backgroundColor: '#1F6FEB', borderColor: '#1F6FEB' },
-  filterChipText: { fontSize: 13, color: '#374151', fontWeight: '600' },
-  filterChipTextActive: { color: '#fff' },
-  empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 40 },
+  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary },
+  filterChipTextActive: { color: colors.textOnPrimary },
 });

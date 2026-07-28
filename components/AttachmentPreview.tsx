@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Pressable, StyleSheet, Text, type ImageStyle, type StyleProp } from 'react-native';
 import { getSignedUrl } from '../lib/storage';
+import { colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
 import { RemoteImage } from './RemoteImage';
 
 interface Props {
@@ -26,7 +27,7 @@ export function AttachmentPreview({ path, mimeType, fileName, style }: Props) {
 
   return (
     <Pressable style={styles.chip} onPress={open}>
-      <Ionicons name="document-text" size={22} color="#1F6FEB" />
+      <Ionicons name="document-text" size={22} color={colors.primary} />
       <Text style={styles.name} numberOfLines={1}>
         {fileName ?? 'Arquivo'}
       </Text>
@@ -38,12 +39,12 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    gap: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     maxWidth: 160,
   },
-  name: { fontSize: 12, color: '#1F6FEB', fontWeight: '600' },
+  name: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, color: colors.primary },
 });

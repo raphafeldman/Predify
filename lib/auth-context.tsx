@@ -6,10 +6,12 @@ import type { Profile } from './types';
 interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
+  isPlatformAdmin: boolean;
   loading: boolean;
   blockedMessage: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -17,6 +19,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
@@ -30,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       if (!newSession) {
         setProfile(null);
+        setIsPlatformAdmin(false);
         setLoading(false);
       }
     });
@@ -42,38 +46,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     setLoading(true);
-
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single()
-      .then(async ({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error('Erro ao carregar perfil:', error.message);
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
-
-        const loadedProfile = data as Profile;
-        if (!loadedProfile.active) {
-          setBlockedMessage('Sua conta foi bloqueada pelo síndico. Fale com ele para mais informações.');
-          await supabase.auth.signOut();
-          setProfile(null);
-          setLoading(false);
-          return;
-        }
-
-        setProfile(loadedProfile);
-        setLoading(false);
-      });
+    loadProfile(session.user.id, () => cancelled).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => {
       cancelled = true;
     };
   }, [session]);
+
+  // Checa profiles e platform_admins em paralelo — uma conta pode ter as
+  // duas coisas (ex: você mesmo, síndico do condomínio de teste e também
+  // administrador da plataforma). Ser admin da plataforma tem prioridade
+  // na navegação, mas não exige ausência de perfil.
+  async function loadProfile(userId: string, cancelled: () => boolean) {
+    const [{ data, error }, { data: adminRow }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supabase.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle(),
+    ]);
+    if (cancelled()) return;
+
+    if (error) {
+      console.error('Erro ao carregar perfil:', error.message);
+      setProfile(null);
+      setIsPlatformAdmin(false);
+      return;
+    }
+
+    if (adminRow) {
+      setProfile((data as Profile | null) ?? null);
+      setIsPlatformAdmin(true);
+      return;
+    }
+
+    if (!data) {
+      setBlockedMessage('Sua conta não está associada a nenhum condomínio. Fale com o administrador.');
+      await supabase.auth.signOut();
+      setProfile(null);
+      setIsPlatformAdmin(false);
+      return;
+    }
+
+    const loadedProfile = data as Profile;
+    if (!loadedProfile.active) {
+      setBlockedMessage('Sua conta foi bloqueada pelo síndico. Fale com ele para mais informações.');
+      await supabase.auth.signOut();
+      setProfile(null);
+      setIsPlatformAdmin(false);
+      return;
+    }
+
+    setProfile(loadedProfile);
+    setIsPlatformAdmin(false);
+  }
+
+  async function refreshProfile() {
+    if (!session) return;
+    await loadProfile(session.user.id, () => false);
+  }
 
   async function signIn(email: string, password: string) {
     setBlockedMessage(null);
@@ -86,7 +116,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, blockedMessage, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ session, profile, isPlatformAdmin, loading, blockedMessage, signIn, signOut, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

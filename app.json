@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "condominio-app",
+    "name": "Zelo",
     "slug": "condominio-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#6C5CE7",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -42,10 +42,18 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#1F6FEB"
+          "color": "#6C5CE7"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#6C5CE7",
+          "image": "./assets/icon.png",
+          "imageWidth": 120
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
