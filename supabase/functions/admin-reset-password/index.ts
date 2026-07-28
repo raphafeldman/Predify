@@ -97,11 +97,11 @@ Deno.serve(async (req) => {
 
     const { error: updateError } = await adminClient.auth.admin.updateUserById(targetUserId, { password });
     if (updateError) {
-      return jsonResponse({ error: updateError.message }, 400);
+      return jsonResponse({ error: updateError.message || `Não foi possível redefinir (status ${updateError.status ?? '?'}).` }, 400);
     }
 
     return jsonResponse({ ok: true });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });

@@ -74,11 +74,11 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, getServiceRoleKey());
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(targetUserId);
     if (deleteError) {
-      return jsonResponse({ error: deleteError.message }, 400);
+      return jsonResponse({ error: deleteError.message || `Não foi possível excluir (status ${deleteError.status ?? '?'}).` }, 400);
     }
 
     return jsonResponse({ ok: true });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });

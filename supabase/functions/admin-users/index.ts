@@ -169,15 +169,16 @@ Deno.serve(async (req) => {
     });
 
     if (createError) {
+      const raw = createError.message ?? '';
       const message =
-        createError.message.includes('already registered') || createError.message.includes('already exists')
+        raw.includes('already registered') || raw.includes('already exists')
           ? 'Já existe uma conta com esse e-mail.'
-          : createError.message;
+          : raw || `Não foi possível criar (status ${createError.status ?? '?'}).`;
       return jsonResponse({ error: message }, 400);
     }
 
     return jsonResponse({ user: created.user });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });

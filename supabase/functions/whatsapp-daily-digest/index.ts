@@ -155,6 +155,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ sent, skipped, failed });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });

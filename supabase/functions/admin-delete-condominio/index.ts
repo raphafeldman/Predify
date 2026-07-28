@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const userErrors: string[] = [];
     for (const perfil of perfis ?? []) {
       const { error } = await adminClient.auth.admin.deleteUser(perfil.id);
-      if (error) userErrors.push(`${perfil.id}: ${error.message}`);
+      if (error) userErrors.push(`${perfil.id}: ${error.message || `status ${error.status ?? '?'}`}`);
       else usersDeleted++;
     }
 
@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     if (deleteCondoError) {
       return jsonResponse(
         {
-          error: `Contas e arquivos foram removidos, mas o condomínio em si não: ${deleteCondoError.message}`,
+          error: `Contas e arquivos foram removidos, mas o condomínio em si não: ${deleteCondoError.message || 'erro desconhecido'}`,
           usersDeleted,
           userErrors,
         },
@@ -142,6 +142,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ ok: true, usersDeleted, userErrors, photosRemoved: storageResult.removed });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });

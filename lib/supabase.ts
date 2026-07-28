@@ -39,7 +39,7 @@ export async function getInvokeErrorMessage(
         // corpo não veio em JSON — cai pro fallback abaixo
       }
     }
-    return invokeError instanceof Error ? invokeError.message : 'Erro inesperado.';
+    return (invokeError instanceof Error && invokeError.message) || 'Erro inesperado.';
   }
   return (data as { error?: string } | null)?.error ?? null;
 }

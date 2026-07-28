@@ -143,11 +143,11 @@ Deno.serve(async (req) => {
     });
 
     if (!result.ok) {
-      return jsonResponse({ error: result.error }, 502);
+      return jsonResponse({ error: result.error || 'Não foi possível enviar a mensagem.' }, 502);
     }
 
     return jsonResponse({ ok: true });
   } catch (err) {
-    return jsonResponse({ error: err instanceof Error ? err.message : 'Erro inesperado.' }, 500);
+    return jsonResponse({ error: (err instanceof Error && err.message) || 'Erro inesperado.' }, 500);
   }
 });
