@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DateInput } from '../../components/DateInput';
 import { FilePicker, type PickedFile } from '../../components/FilePicker';
@@ -271,7 +272,7 @@ function EquipmentFormModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>{item ? 'Editar equipamento' : 'Novo equipamento'}</Text>
 
@@ -314,7 +315,7 @@ function EquipmentFormModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -373,7 +374,7 @@ function EquipmentDetailModal({
   const urgency = getMaintenanceUrgency(item.next_due_date);
 
   return (
-    <Modal visible={Boolean(item)} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={Boolean(item)} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <View style={styles.detailHeaderRow}>
           <Text style={styles.modalTitle}>{item.name}</Text>
@@ -444,7 +445,7 @@ function EquipmentDetailModal({
           onSaved();
         }}
       />
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -543,7 +544,7 @@ function LogMaintenanceModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Registrar manutenção — {item.name}</Text>
 
@@ -580,7 +581,7 @@ function LogMaintenanceModal({
           com a frequência dele.
         </Text>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

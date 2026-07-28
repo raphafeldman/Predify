@@ -1,17 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
+import { ScreenActionButton } from '../../components/ScreenActionButton';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
-import { colors, floatingShadow, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { MaintenanceItem, MaintenanceRecord, MaintenanceRecordType } from '../../lib/types';
 
 export default function ManutencaoScreen() {
@@ -41,6 +43,8 @@ export default function ManutencaoScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenActionButton label="Registrar manutenção" onPress={() => setRecordFormOpen(true)} />
+
       <FlatList
         data={records}
         keyExtractor={(item) => item.id}
@@ -79,11 +83,6 @@ export default function ManutencaoScreen() {
           );
         }}
       />
-
-      <Pressable style={styles.fab} onPress={() => setRecordFormOpen(true)}>
-        <Ionicons name="add" size={18} color={colors.textOnPrimary} />
-        <Text style={styles.fabText}>Registrar manutenção</Text>
-      </Pressable>
 
       <NewRecordModal
         visible={recordFormOpen}
@@ -156,7 +155,7 @@ function NewRecordModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Registrar manutenção</Text>
 
@@ -222,7 +221,7 @@ function NewRecordModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -239,20 +238,6 @@ const styles = StyleSheet.create({
   addLink: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.sm },
   hintSmall: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
   description: { fontFamily: fontFamily.regular, fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.sm },
-  fab: {
-    position: 'absolute',
-    bottom: spacing.xl,
-    right: spacing.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    ...floatingShadow,
-  },
-  fabText: { fontFamily: fontFamily.bold, color: colors.textOnPrimary, fontSize: fontSize.sm },
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
   label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { FilePicker, type PickedFile } from '../../components/FilePicker';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
@@ -281,7 +282,7 @@ function FornecedorFormModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>{fornecedor ? 'Editar fornecedor' : 'Novo fornecedor'}</Text>
 
@@ -331,7 +332,7 @@ function FornecedorFormModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -374,7 +375,7 @@ function FornecedorDetailModal({
   const equipmentName = items.find((i) => i.id === fornecedor.maintenance_item_id)?.name;
 
   return (
-    <Modal visible={Boolean(fornecedor)} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={Boolean(fornecedor)} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <View style={styles.detailHeaderRow}>
           <Text style={styles.modalTitle}>{fornecedor.name}</Text>
@@ -407,7 +408,7 @@ function FornecedorDetailModal({
           <Button title="Fechar" onPress={onClose} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

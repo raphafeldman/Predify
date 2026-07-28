@@ -1,7 +1,8 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { BarChart } from '../../components/BarChart';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PieChart } from '../../components/PieChart';
@@ -400,7 +401,7 @@ function CondoSettingsModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Dados do condomínio</Text>
 
@@ -422,7 +423,7 @@ function CondoSettingsModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

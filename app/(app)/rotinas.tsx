@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -186,7 +187,7 @@ function RotinaFormModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>{item ? 'Editar rotina' : 'Nova rotina'}</Text>
 
@@ -253,7 +254,7 @@ function RotinaFormModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

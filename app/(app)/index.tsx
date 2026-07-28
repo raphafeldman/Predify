@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DateInput } from '../../components/DateInput';
 import { HomeHeader } from '../../components/HomeHeader';
@@ -409,7 +410,7 @@ function NewTaskModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>{funcionarios ? 'Agendar tarefa' : 'Nova tarefa'}</Text>
 
@@ -454,7 +455,7 @@ function NewTaskModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

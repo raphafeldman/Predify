@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
+import { ScreenActionButton } from '../../components/ScreenActionButton';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
@@ -12,7 +14,7 @@ import { useAuth } from '../../lib/auth-context';
 import { CATEGORY_LABEL } from '../../lib/categories';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
-import { colors, floatingShadow, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Occurrence, OccurrenceSeverity, OccurrenceStatus, Profile } from '../../lib/types';
 
 function AssigneePicker({
@@ -131,6 +133,8 @@ export default function OrdensScreen() {
 
   return (
     <View style={styles.container}>
+      <ScreenActionButton label="Nova ordem de serviço" onPress={() => setFormOpen(true)} />
+
       <FlatList
         data={ordens}
         keyExtractor={(item) => item.id}
@@ -208,11 +212,6 @@ export default function OrdensScreen() {
           );
         }}
       />
-
-      <Pressable style={styles.fab} onPress={() => setFormOpen(true)}>
-        <Ionicons name="add" size={18} color={colors.textOnPrimary} />
-        <Text style={styles.fabText}>Nova ordem de serviço</Text>
-      </Pressable>
 
       <NewOrdemModal
         visible={formOpen}
@@ -310,7 +309,7 @@ function NewOrdemModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Nova ordem de serviço</Text>
 
@@ -378,7 +377,7 @@ function NewOrdemModal({
           <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -423,20 +422,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   quoteButtonText: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.xs },
-  fab: {
-    position: 'absolute',
-    bottom: spacing.xl,
-    right: spacing.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    ...floatingShadow,
-  },
-  fabText: { fontFamily: fontFamily.bold, color: colors.textOnPrimary, fontSize: fontSize.sm },
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
   label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },

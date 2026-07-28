@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -233,10 +234,9 @@ function NewCondominioModal({
   }
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
-      animationType="slide"
-      onRequestClose={() => {
+      onClose={() => {
         reset();
         onClose();
       }}
@@ -268,7 +268,7 @@ function NewCondominioModal({
           <Button title="Criar" onPress={submit} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -328,10 +328,9 @@ function CreateSindicoModal({
   }
 
   return (
-    <Modal
+    <AppModal
       visible={Boolean(condominioId)}
-      animationType="slide"
-      onRequestClose={() => {
+      onClose={() => {
         reset();
         onClose();
       }}
@@ -378,7 +377,7 @@ function CreateSindicoModal({
           feito — veja o SETUP.md.
         </Text>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -455,7 +454,7 @@ function EditCondominioModal({
   if (!condominio) return null;
 
   return (
-    <Modal visible={Boolean(condominio)} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={Boolean(condominio)} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>{condominio.name ?? 'Condomínio'}</Text>
 
@@ -556,7 +555,7 @@ function EditCondominioModal({
           <Button title="Salvar" onPress={save} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

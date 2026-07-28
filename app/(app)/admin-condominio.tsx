@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { DashboardSummary } from '../../components/DashboardSummary';
 import { FeedCard, type FeedItem } from './index';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
@@ -267,7 +268,7 @@ function DeleteUserModal({
   if (!profile) return null;
 
   return (
-    <Modal visible={Boolean(profile)} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={Boolean(profile)} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Excluir usuário</Text>
         <Text style={styles.confirmText}>
@@ -292,7 +293,7 @@ function DeleteUserModal({
           />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 

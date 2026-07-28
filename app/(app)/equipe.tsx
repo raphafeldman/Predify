@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -193,7 +194,7 @@ function NewUserModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Novo usuário</Text>
 
@@ -245,7 +246,7 @@ function NewUserModal({
           feito — veja o SETUP.md.
         </Text>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
@@ -367,7 +368,7 @@ function EditProfileModal({
   const isSelf = profile.id === myProfile?.id;
 
   return (
-    <Modal visible={Boolean(profile)} animationType="slide" onRequestClose={onClose}>
+    <AppModal visible={Boolean(profile)} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
         <Text style={styles.modalTitle}>Editar usuário</Text>
 
@@ -514,7 +515,7 @@ function EditProfileModal({
           <Button title="Salvar" onPress={save} loading={saving} style={styles.flex1} />
         </View>
       </ModalFormLayout>
-    </Modal>
+    </AppModal>
   );
 }
 
