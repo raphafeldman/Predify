@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../components/ui/Card';
 import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../lib/auth-context';
@@ -11,7 +11,7 @@ export default function PerfilScreen() {
   const router = useRouter();
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.logoRow}>
         <Logo />
       </View>
@@ -91,12 +91,13 @@ export default function PerfilScreen() {
       <Pressable style={styles.logoutButton} onPress={signOut}>
         <Text style={styles.logoutText}>Sair</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.lg, paddingBottom: spacing['3xl'] },
   logoRow: { alignItems: 'center', marginBottom: spacing.lg },
   card: { marginBottom: spacing.lg },
   name: { fontFamily: fontFamily.bold, fontSize: fontSize.xl, color: colors.textPrimary },
