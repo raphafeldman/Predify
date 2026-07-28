@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: spacing.xl,
     right: spacing.xl,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
