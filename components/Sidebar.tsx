@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/mensagens', label: 'Mensagens', icon: 'notifications-outline' },
   { href: '/prestadores', label: 'Prestadores', icon: 'briefcase' },
   { href: '/equipamentos', label: 'Equipamentos', icon: 'hardware-chip' },
+  { href: '/fornecedores', label: 'Fornecedores', icon: 'business' },
   { href: '/manutencao', label: 'Manutenção', icon: 'construct' },
   { href: '/rotinas', label: 'Rotinas', icon: 'repeat', sindicoOnly: true },
   { href: '/documentos', label: 'Documentos', icon: 'document-text' },

@@ -45,6 +45,12 @@ export default function PerfilScreen() {
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
           </Pressable>
 
+          <Pressable style={styles.linkRow} onPress={() => router.push('/fornecedores')}>
+            <Ionicons name="business-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Fornecedores</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
+
           <Pressable style={styles.linkRow} onPress={() => router.push('/prestadores')}>
             <Ionicons name="briefcase-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.linkText}>Prestadores</Text>

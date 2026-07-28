@@ -92,6 +92,7 @@ export default function AppLayout() {
       <Tabs.Screen name="historico" options={{ href: null, title: 'Histórico' }} />
       <Tabs.Screen name="equipe" options={{ href: null, title: 'Equipe' }} />
       <Tabs.Screen name="equipamentos" options={{ href: null, title: 'Equipamentos' }} />
+      <Tabs.Screen name="fornecedores" options={{ href: null, title: 'Fornecedores' }} />
       <Tabs.Screen name="rotinas" options={{ href: null, title: 'Rotinas' }} />
       <Tabs.Screen name="prestadores" options={{ href: null, title: 'Prestadores' }} />
       <Tabs.Screen name="admin" options={{ href: null, title: 'Administração' }} />

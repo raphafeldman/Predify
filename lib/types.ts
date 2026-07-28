@@ -88,6 +88,24 @@ export interface MaintenanceRecord {
   performed_by: string | null;
   performed_at: string;
   created_at: string;
+  fornecedor_id: string | null;
+  om_file_url: string | null;
+  om_file_name: string | null;
+  om_mime_type: string | null;
+}
+
+export interface Fornecedor {
+  id: string;
+  name: string;
+  service_type: string;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  maintenance_item_id: string | null;
+  contract_notes: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface ChecklistTemplate {

@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DateInput } from '../../components/DateInput';
+import { FilePicker, type PickedFile } from '../../components/FilePicker';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { RecordCard } from '../../components/RecordCard';
@@ -11,11 +13,11 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { FREQUENCY_LABEL, getMaintenanceUrgency, URGENCY_COLOR, URGENCY_LABEL } from '../../lib/frequency';
-import { uploadPhotos } from '../../lib/storage';
+import { uploadFile, uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useIsWideScreen } from '../../lib/useIsWideScreen';
-import type { MaintenanceFrequency, MaintenanceItem, MaintenanceRecord, Profile } from '../../lib/types';
+import type { Fornecedor, MaintenanceFrequency, MaintenanceItem, MaintenanceRecord, Profile } from '../../lib/types';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR');
@@ -26,17 +28,20 @@ export default function EquipamentosScreen() {
   const isWeb = useIsWideScreen();
   const [items, setItems] = useState<MaintenanceItem[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<MaintenanceItem | null>(null);
 
   const load = useCallback(async () => {
-    const [itemsRes, profilesRes] = await Promise.all([
+    const [itemsRes, profilesRes, fornecedoresRes] = await Promise.all([
       supabase.from('maintenance_items').select('*').order('next_due_date'),
       supabase.from('profiles').select('*').eq('role', 'funcionario').eq('active', true),
+      supabase.from('fornecedores').select('*').eq('active', true).order('name'),
     ]);
     if (itemsRes.data) setItems(itemsRes.data as MaintenanceItem[]);
     if (profilesRes.data) setFuncionarios(profilesRes.data as Profile[]);
+    if (fornecedoresRes.data) setFornecedores(fornecedoresRes.data as Fornecedor[]);
     setLoading(false);
   }, []);
 
@@ -128,6 +133,7 @@ export default function EquipamentosScreen() {
       <EquipmentDetailModal
         item={selected}
         funcionarios={funcionarios}
+        fornecedores={fornecedores}
         canEdit={profile?.role === 'sindico'}
         onClose={() => setSelected(null)}
         onSaved={() => {
@@ -315,12 +321,14 @@ function EquipmentFormModal({
 function EquipmentDetailModal({
   item,
   funcionarios,
+  fornecedores,
   canEdit,
   onClose,
   onSaved,
 }: {
   item: MaintenanceItem | null;
   funcionarios: Profile[];
+  fornecedores: Fornecedor[];
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -394,19 +402,33 @@ function EquipmentDetailModal({
 
         <Text style={[styles.label, { marginTop: spacing.xl }]}>Histórico</Text>
         {records.length === 0 && <Text style={styles.empty}>Nenhuma manutenção registrada ainda.</Text>}
-        {records.map((record) => (
-          <RecordCard
-            key={record.id}
-            recordType="maintenance_record"
-            recordId={record.id}
-            title={record.type === 'preventiva' ? 'Preventiva' : 'Corretiva'}
-            subtitle={new Date(record.performed_at).toLocaleString('pt-BR')}
-            badge={{ label: record.status, color: colors.primary }}
-            photoPaths={record.photo_urls}
-          >
-            <Text style={styles.detailLine}>{record.description}</Text>
-          </RecordCard>
-        ))}
+        {records.map((record) => {
+          const fornecedor = fornecedores.find((f) => f.id === record.fornecedor_id);
+          const subtitleParts = [new Date(record.performed_at).toLocaleString('pt-BR')];
+          if (fornecedor) subtitleParts.push(`Fornecedor: ${fornecedor.name}`);
+          return (
+            <RecordCard
+              key={record.id}
+              recordType="maintenance_record"
+              recordId={record.id}
+              title={record.type === 'preventiva' ? 'Preventiva' : 'Corretiva'}
+              subtitle={subtitleParts.join(' • ')}
+              badge={{ label: record.status, color: colors.primary }}
+              photoPaths={record.photo_urls}
+            >
+              <Text style={styles.detailLine}>{record.description}</Text>
+              {record.om_file_url && (
+                <View style={{ marginTop: spacing.sm }}>
+                  <AttachmentPreview
+                    path={record.om_file_url}
+                    mimeType={record.om_mime_type ?? 'application/octet-stream'}
+                    fileName={record.om_file_name ?? 'OM'}
+                  />
+                </View>
+              )}
+            </RecordCard>
+          );
+        })}
 
         <Button title="Fechar" variant="secondary" onPress={onClose} style={{ marginTop: spacing.md }} />
       </ModalFormLayout>
@@ -414,6 +436,7 @@ function EquipmentDetailModal({
       <LogMaintenanceModal
         visible={logFormOpen}
         item={item}
+        fornecedores={fornecedores}
         onClose={() => setLogFormOpen(false)}
         onSaved={() => {
           setLogFormOpen(false);
@@ -425,20 +448,51 @@ function EquipmentDetailModal({
   );
 }
 
+function FornecedorPicker({
+  value,
+  fornecedores,
+  onChange,
+}: {
+  value: string | null;
+  fornecedores: Fornecedor[];
+  onChange: (id: string | null) => void;
+}) {
+  return (
+    <View style={styles.optionsRow}>
+      <Pressable style={[styles.option, value === null && styles.optionActive]} onPress={() => onChange(null)}>
+        <Text style={[styles.optionText, value === null && styles.optionTextActive]}>Nenhum</Text>
+      </Pressable>
+      {fornecedores.map((f) => (
+        <Pressable
+          key={f.id}
+          style={[styles.option, value === f.id && styles.optionActive]}
+          onPress={() => onChange(f.id)}
+        >
+          <Text style={[styles.optionText, value === f.id && styles.optionTextActive]}>{f.name}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function LogMaintenanceModal({
   visible,
   item,
+  fornecedores,
   onClose,
   onSaved,
 }: {
   visible: boolean;
   item: MaintenanceItem;
+  fornecedores: Fornecedor[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { session, profile } = useAuth();
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [fornecedorId, setFornecedorId] = useState<string | null>(null);
+  const [omFile, setOmFile] = useState<PickedFile | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -446,6 +500,8 @@ function LogMaintenanceModal({
     if (visible) {
       setDescription('');
       setPhotos([]);
+      setFornecedorId(null);
+      setOmFile(null);
       setError(null);
     }
   }, [visible]);
@@ -462,6 +518,9 @@ function LogMaintenanceModal({
       const photoPaths = photos.length
         ? await uploadPhotos(photos, 'maintenance', session.user.id, profile.condominio_id)
         : [];
+      const omPath = omFile
+        ? await uploadFile(omFile.uri, 'maintenance', session.user.id, profile.condominio_id, omFile.mimeType, omFile.name)
+        : null;
       const { error: insertError } = await supabase.from('maintenance_records').insert({
         maintenance_item_id: item.id,
         type: 'preventiva',
@@ -469,6 +528,10 @@ function LogMaintenanceModal({
         photo_urls: photoPaths,
         performed_by: session.user.id,
         status: 'concluida',
+        fornecedor_id: fornecedorId,
+        om_file_url: omPath,
+        om_file_name: omFile?.name ?? null,
+        om_mime_type: omFile?.mimeType ?? null,
       });
       if (insertError) throw insertError;
       onSaved();
@@ -492,8 +555,18 @@ function LogMaintenanceModal({
           multiline
         />
 
+        {fornecedores.length > 0 && (
+          <>
+            <Text style={styles.label}>Fornecedor que realizou (opcional)</Text>
+            <FornecedorPicker value={fornecedorId} fornecedores={fornecedores} onChange={setFornecedorId} />
+          </>
+        )}
+
         <Text style={styles.label}>Fotos (opcional)</Text>
         <PhotoPicker uris={photos} onChange={setPhotos} />
+
+        <Text style={styles.label}>Anexar OM do fornecedor (opcional)</Text>
+        <FilePicker file={omFile} onChange={setOmFile} />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 

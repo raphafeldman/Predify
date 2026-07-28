@@ -1763,3 +1763,48 @@ alter table public.profiles add constraint profiles_condominio_id_fkey
 alter table public.condominios drop constraint if exists condominios_created_by_fkey;
 alter table public.condominios add constraint condominios_created_by_fkey
   foreign key (created_by) references auth.users (id) on delete set null;
+
+-- ------------------------------------------------------------
+-- Migração: fornecedores com contrato de prestação de serviço (ex.:
+-- manutenção mensal de gerador, jardinagem) — vinculáveis a um
+-- equipamento, e a OM (ordem de manutenção) do prestador anexável ao
+-- registro de manutenção correspondente. Registra quem foi, quando foi
+-- e o que foi feito.
+-- ------------------------------------------------------------
+create table if not exists public.fornecedores (
+  id uuid primary key default gen_random_uuid(),
+  condominio_id uuid not null references public.condominios (id) on delete cascade,
+  name text not null,
+  service_type text not null,
+  contact_name text,
+  phone text,
+  email text,
+  maintenance_item_id uuid references public.maintenance_items (id) on delete set null,
+  contract_notes text,
+  active boolean not null default true,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.fornecedores enable row level security;
+
+drop trigger if exists stamp_condominio_id on public.fornecedores;
+create trigger stamp_condominio_id
+  before insert on public.fornecedores
+  for each row execute function public.stamp_condominio_id();
+
+drop policy if exists "fornecedores_select" on public.fornecedores;
+create policy "fornecedores_select" on public.fornecedores
+  for select to authenticated
+  using (condominio_id = public.current_condominio_id() or public.is_platform_admin());
+
+drop policy if exists "fornecedores_write_sindico" on public.fornecedores;
+create policy "fornecedores_write_sindico" on public.fornecedores
+  for all to authenticated
+  using ((condominio_id = public.current_condominio_id() and public.is_sindico()) or public.is_platform_admin())
+  with check ((condominio_id = public.current_condominio_id() and public.is_sindico()) or public.is_platform_admin());
+
+alter table public.maintenance_records add column if not exists fornecedor_id uuid references public.fornecedores (id) on delete set null;
+alter table public.maintenance_records add column if not exists om_file_url text;
+alter table public.maintenance_records add column if not exists om_file_name text;
+alter table public.maintenance_records add column if not exists om_mime_type text;
