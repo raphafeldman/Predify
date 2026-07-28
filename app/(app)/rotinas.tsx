@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -10,12 +10,12 @@ import { useAuth } from '../../lib/auth-context';
 import { FREQUENCY_LABEL } from '../../lib/frequency';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { useIsWideScreen } from '../../lib/useIsWideScreen';
 import type { ChecklistTemplate, MaintenanceFrequency, Profile } from '../../lib/types';
-
-const isWeb = Platform.OS === 'web';
 
 export default function RotinasScreen() {
   const { profile } = useAuth();
+  const isWeb = useIsWideScreen();
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);

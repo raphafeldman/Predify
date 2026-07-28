@@ -7,9 +7,11 @@ import { Sidebar } from '../../components/Sidebar';
 import { useAuth } from '../../lib/auth-context';
 import { registerForPushNotificationsAsync } from '../../lib/notifications';
 import { colors, layout } from '../../lib/theme';
+import { useIsWideScreen } from '../../lib/useIsWideScreen';
 
 export default function AppLayout() {
   const { session, profile, isPlatformAdmin, loading } = useAuth();
+  const isWideScreen = useIsWideScreen();
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -33,7 +35,7 @@ export default function AppLayout() {
     return <CreateCondominioScreen />;
   }
 
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' && isWideScreen) {
     return (
       <View style={styles.webRoot}>
         <Sidebar />

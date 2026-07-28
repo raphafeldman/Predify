@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -9,12 +9,12 @@ import { useAuth } from '../../lib/auth-context';
 import { JOB_TITLE_LABEL } from '../../lib/jobTitles';
 import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { useIsWideScreen } from '../../lib/useIsWideScreen';
 import type { Profile, Role } from '../../lib/types';
-
-const isWeb = Platform.OS === 'web';
 
 export default function EquipeScreen() {
   const { profile: myProfile } = useAuth();
+  const isWeb = useIsWideScreen();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Profile | null>(null);

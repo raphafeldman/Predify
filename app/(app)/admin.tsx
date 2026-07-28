@@ -1,16 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/TextField';
 import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { useIsWideScreen } from '../../lib/useIsWideScreen';
 import type { BillingStatus, Condominio, CondominioUsageStats, Profile } from '../../lib/types';
-
-const isWeb = Platform.OS === 'web';
 
 const BILLING_LABEL: Record<BillingStatus, string> = {
   trialing: 'Em teste',
@@ -40,6 +39,7 @@ function formatBytes(bytes: number) {
 
 export function AdminPanel() {
   const router = useRouter();
+  const isWeb = useIsWideScreen();
   const [condominios, setCondominios] = useState<Condominio[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [usageStats, setUsageStats] = useState<Record<string, CondominioUsageStats>>({});

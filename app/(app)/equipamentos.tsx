@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { DateInput } from '../../components/DateInput';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
@@ -14,9 +14,8 @@ import { FREQUENCY_LABEL, getMaintenanceUrgency, URGENCY_COLOR, URGENCY_LABEL } 
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
+import { useIsWideScreen } from '../../lib/useIsWideScreen';
 import type { MaintenanceFrequency, MaintenanceItem, MaintenanceRecord, Profile } from '../../lib/types';
-
-const isWeb = Platform.OS === 'web';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR');
@@ -24,6 +23,7 @@ function formatDate(dateStr: string) {
 
 export default function EquipamentosScreen() {
   const { profile } = useAuth();
+  const isWeb = useIsWideScreen();
   const [items, setItems] = useState<MaintenanceItem[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
