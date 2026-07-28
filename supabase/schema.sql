@@ -1695,6 +1695,15 @@ alter table public.profiles drop constraint if exists profiles_condominio_id_fke
 alter table public.profiles add constraint profiles_condominio_id_fkey
   foreign key (condominio_id) references public.condominios (id) on delete cascade;
 
+-- Faltava esta: condominios.created_by aponta pra auth.users(id) direto
+-- (não pra profiles), então não foi pega pelo laço acima. Sem isso,
+-- excluir a conta de quem criou o condomínio (comum — é o síndico
+-- fundador em todo cadastro self-service) falhava com violação de chave
+-- estrangeira, mesmo o condomínio continuando de pé.
+alter table public.condominios drop constraint if exists condominios_created_by_fkey;
+alter table public.condominios add constraint condominios_created_by_fkey
+  foreign key (created_by) references auth.users (id) on delete set null;
+
 -- ============================================================
 -- Migração: agente de WhatsApp (fase 1 — só envio: lembrete diário de
 -- pendências e aviso avulso do síndico). O token de verdade da Meta nunca
