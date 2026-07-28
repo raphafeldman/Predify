@@ -1589,6 +1589,63 @@ create trigger on_occurrence_completed
   for each row execute function public.notify_os_completed();
 
 -- ============================================================
+-- Migração: agente de WhatsApp (fase 1 — só envio: lembrete diário de
+-- pendências e aviso avulso do síndico). O token de verdade da Meta nunca
+-- entra aqui — mora só nas Edge Functions (Deno.env), mesmo padrão de
+-- SUPABASE_SERVICE_ROLE_KEY. O gatilho de cron abaixo só chama a Edge
+-- Function usando a anon key (pública, não é segredo).
+-- ============================================================
+create table if not exists public.whatsapp_messages (
+  id uuid primary key default gen_random_uuid(),
+  condominio_id uuid not null references public.condominios (id),
+  user_id uuid not null references public.profiles (id),
+  phone text not null,
+  kind text not null check (kind in ('lembrete_diario', 'aviso_sindico')),
+  body text not null,
+  status text not null check (status in ('enviado', 'falha')),
+  error text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.whatsapp_messages enable row level security;
+
+drop policy if exists "whatsapp_messages_select" on public.whatsapp_messages;
+create policy "whatsapp_messages_select" on public.whatsapp_messages
+  for select to authenticated
+  using (
+    (condominio_id = public.current_condominio_id() and public.is_sindico())
+    or public.is_platform_admin()
+  );
+
+-- Sem política de insert: só as Edge Functions (service role) escrevem.
+
+-- IMPORTANTE: troque <SUA-ANON-KEY> pelo valor real (Project Settings >
+-- API > anon public key — o mesmo que já está no seu .env) antes de rodar
+-- esse bloco. Sem isso o cron chama a função sem autenticação válida.
+create or replace function public.trigger_whatsapp_daily_digest()
+returns void
+language plpgsql
+security definer
+set search_path = public, net
+as $$
+begin
+  perform net.http_post(
+    url := 'https://qkatokyhufovtwwhowzo.supabase.co/functions/v1/whatsapp-daily-digest',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <SUA-ANON-KEY>'),
+    body := '{}'::jsonb
+  );
+end;
+$$;
+
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'whatsapp-daily-digest') then
+    perform cron.unschedule('whatsapp-daily-digest');
+  end if;
+  perform cron.schedule('whatsapp-daily-digest', '0 10 * * *', $cron$select public.trigger_whatsapp_daily_digest();$cron$);
+end $$;
+
+-- ============================================================
 -- Migração: permite excluir um condomínio inteiro, ou uma conta de
 -- usuário isolada, pelo painel do administrador da plataforma.
 --
@@ -1604,6 +1661,9 @@ create trigger on_occurrence_completed
 -- etapas na Edge Function: primeiro apaga a conta de cada usuário do
 -- condomínio (só anula a autoria via a regra 1), depois apaga a linha do
 -- condomínio (que aí sim arrasta tudo que sobrou via a regra 2).
+--
+-- Precisa rodar depois da tabela whatsapp_messages existir (seção
+-- "agente de WhatsApp" acima) — por isso fica no fim do arquivo.
 -- ============================================================
 
 -- --- 1) FKs pra profiles(id): "on delete set null" ---
@@ -1703,60 +1763,3 @@ alter table public.profiles add constraint profiles_condominio_id_fkey
 alter table public.condominios drop constraint if exists condominios_created_by_fkey;
 alter table public.condominios add constraint condominios_created_by_fkey
   foreign key (created_by) references auth.users (id) on delete set null;
-
--- ============================================================
--- Migração: agente de WhatsApp (fase 1 — só envio: lembrete diário de
--- pendências e aviso avulso do síndico). O token de verdade da Meta nunca
--- entra aqui — mora só nas Edge Functions (Deno.env), mesmo padrão de
--- SUPABASE_SERVICE_ROLE_KEY. O gatilho de cron abaixo só chama a Edge
--- Function usando a anon key (pública, não é segredo).
--- ============================================================
-create table if not exists public.whatsapp_messages (
-  id uuid primary key default gen_random_uuid(),
-  condominio_id uuid not null references public.condominios (id),
-  user_id uuid not null references public.profiles (id),
-  phone text not null,
-  kind text not null check (kind in ('lembrete_diario', 'aviso_sindico')),
-  body text not null,
-  status text not null check (status in ('enviado', 'falha')),
-  error text,
-  created_at timestamptz not null default now()
-);
-
-alter table public.whatsapp_messages enable row level security;
-
-drop policy if exists "whatsapp_messages_select" on public.whatsapp_messages;
-create policy "whatsapp_messages_select" on public.whatsapp_messages
-  for select to authenticated
-  using (
-    (condominio_id = public.current_condominio_id() and public.is_sindico())
-    or public.is_platform_admin()
-  );
-
--- Sem política de insert: só as Edge Functions (service role) escrevem.
-
--- IMPORTANTE: troque <SUA-ANON-KEY> pelo valor real (Project Settings >
--- API > anon public key — o mesmo que já está no seu .env) antes de rodar
--- esse bloco. Sem isso o cron chama a função sem autenticação válida.
-create or replace function public.trigger_whatsapp_daily_digest()
-returns void
-language plpgsql
-security definer
-set search_path = public, net
-as $$
-begin
-  perform net.http_post(
-    url := 'https://qkatokyhufovtwwhowzo.supabase.co/functions/v1/whatsapp-daily-digest',
-    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <SUA-ANON-KEY>'),
-    body := '{}'::jsonb
-  );
-end;
-$$;
-
-do $$
-begin
-  if exists (select 1 from cron.job where jobname = 'whatsapp-daily-digest') then
-    perform cron.unschedule('whatsapp-daily-digest');
-  end if;
-  perform cron.schedule('whatsapp-daily-digest', '0 10 * * *', $cron$select public.trigger_whatsapp_daily_digest();$cron$);
-end $$;
