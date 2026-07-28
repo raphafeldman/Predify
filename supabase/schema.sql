@@ -1808,3 +1808,10 @@ alter table public.maintenance_records add column if not exists fornecedor_id uu
 alter table public.maintenance_records add column if not exists om_file_url text;
 alter table public.maintenance_records add column if not exists om_file_name text;
 alter table public.maintenance_records add column if not exists om_mime_type text;
+
+-- Anexo de documento no próprio cadastro do fornecedor (ex.: cópia do
+-- contrato, apólice de seguro) — diferente da OM por visita, que fica em
+-- maintenance_records.
+alter table public.fornecedores add column if not exists contract_file_url text;
+alter table public.fornecedores add column if not exists contract_file_name text;
+alter table public.fornecedores add column if not exists contract_file_mime_type text;

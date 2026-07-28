@@ -104,6 +104,9 @@ export interface Fornecedor {
   maintenance_item_id: string | null;
   contract_notes: string | null;
   active: boolean;
+  contract_file_url: string | null;
+  contract_file_name: string | null;
+  contract_file_mime_type: string | null;
   created_by: string | null;
   created_at: string;
 }

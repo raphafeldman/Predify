@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AttachmentPreview } from '../../components/AttachmentPreview';
+import { FilePicker, type PickedFile } from '../../components/FilePicker';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
+import { uploadFile } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useIsWideScreen } from '../../lib/useIsWideScreen';
@@ -186,7 +189,7 @@ function FornecedorFormModal({
   onSaved: () => void;
   fornecedor?: Fornecedor | null;
 }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [name, setName] = useState('');
   const [serviceType, setServiceType] = useState('');
   const [contactName, setContactName] = useState('');
@@ -195,6 +198,12 @@ function FornecedorFormModal({
   const [maintenanceItemId, setMaintenanceItemId] = useState<string | null>(null);
   const [contractNotes, setContractNotes] = useState('');
   const [active, setActive] = useState(true);
+  const [contractFile, setContractFile] = useState<PickedFile | null>(null);
+  const [existingContract, setExistingContract] = useState<{
+    url: string;
+    name: string | null;
+    mimeType: string | null;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,37 +217,67 @@ function FornecedorFormModal({
       setMaintenanceItemId(fornecedor?.maintenance_item_id ?? null);
       setContractNotes(fornecedor?.contract_notes ?? '');
       setActive(fornecedor?.active ?? true);
+      setContractFile(null);
+      setExistingContract(
+        fornecedor?.contract_file_url
+          ? {
+              url: fornecedor.contract_file_url,
+              name: fornecedor.contract_file_name,
+              mimeType: fornecedor.contract_file_mime_type,
+            }
+          : null
+      );
       setError(null);
     }
   }, [visible, fornecedor]);
 
   async function submit() {
-    if (!session) return;
+    if (!session || !profile) return;
     if (!name.trim() || !serviceType.trim()) {
       setError('Preencha nome e tipo de serviço.');
       return;
     }
     setSaving(true);
     setError(null);
-    const payload = {
-      name: name.trim(),
-      service_type: serviceType.trim(),
-      contact_name: contactName.trim() || null,
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-      maintenance_item_id: maintenanceItemId,
-      contract_notes: contractNotes.trim() || null,
-      active,
-    };
-    const { error: saveError } = fornecedor
-      ? await supabase.from('fornecedores').update(payload).eq('id', fornecedor.id)
-      : await supabase.from('fornecedores').insert({ ...payload, created_by: session.user.id });
-    setSaving(false);
-    if (saveError) {
-      setError(saveError.message);
-      return;
+    try {
+      let contractFileUrl = existingContract?.url ?? null;
+      let contractFileName = existingContract?.name ?? null;
+      let contractFileMimeType = existingContract?.mimeType ?? null;
+      if (contractFile) {
+        contractFileUrl = await uploadFile(
+          contractFile.uri,
+          'fornecedores',
+          session.user.id,
+          profile.condominio_id,
+          contractFile.mimeType,
+          contractFile.name
+        );
+        contractFileName = contractFile.name;
+        contractFileMimeType = contractFile.mimeType;
+      }
+      const payload = {
+        name: name.trim(),
+        service_type: serviceType.trim(),
+        contact_name: contactName.trim() || null,
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        maintenance_item_id: maintenanceItemId,
+        contract_notes: contractNotes.trim() || null,
+        active,
+        contract_file_url: contractFileUrl,
+        contract_file_name: contractFileName,
+        contract_file_mime_type: contractFileMimeType,
+      };
+      const { error: saveError } = fornecedor
+        ? await supabase.from('fornecedores').update(payload).eq('id', fornecedor.id)
+        : await supabase.from('fornecedores').insert({ ...payload, created_by: session.user.id });
+      if (saveError) throw saveError;
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível salvar.');
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -266,6 +305,21 @@ function FornecedorFormModal({
           onChangeText={setContractNotes}
           multiline
         />
+
+        <Text style={styles.label}>Documento do contrato (opcional)</Text>
+        {existingContract && !contractFile && (
+          <View style={{ marginBottom: spacing.sm }}>
+            <AttachmentPreview
+              path={existingContract.url}
+              mimeType={existingContract.mimeType ?? 'application/octet-stream'}
+              fileName={existingContract.name ?? 'Documento'}
+            />
+            <Pressable onPress={() => setExistingContract(null)}>
+              <Text style={styles.removeLink}>Remover anexo</Text>
+            </Pressable>
+          </View>
+        )}
+        <FilePicker file={contractFile} onChange={setContractFile} />
 
         <Text style={styles.label}>Status</Text>
         <ActivePicker value={active} onChange={setActive} />
@@ -336,6 +390,15 @@ function FornecedorDetailModal({
         {fornecedor.phone ? <Text style={styles.detailLine}>Telefone: {fornecedor.phone}</Text> : null}
         {fornecedor.email ? <Text style={styles.detailLine}>E-mail: {fornecedor.email}</Text> : null}
         {fornecedor.contract_notes ? <Text style={styles.detailLine}>{fornecedor.contract_notes}</Text> : null}
+        {fornecedor.contract_file_url ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <AttachmentPreview
+              path={fornecedor.contract_file_url}
+              mimeType={fornecedor.contract_file_mime_type ?? 'application/octet-stream'}
+              fileName={fornecedor.contract_file_name ?? 'Documento do contrato'}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.modalButtonsRow}>
           {canEdit && (
@@ -401,6 +464,7 @@ const styles = StyleSheet.create({
   optionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
   optionTextActive: { color: colors.textOnPrimary },
   error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  removeLink: { fontFamily: fontFamily.semibold, color: colors.danger, fontSize: fontSize.xs, marginTop: spacing.xs },
   modalButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
   flex1: { flex: 1 },
 });
