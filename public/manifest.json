@@ -1,0 +1,13 @@
+{
+  "short_name": "Predify",
+  "name": "Predify — Gestão de condomínios",
+  "icons": [
+    { "src": "/icon.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon.png", "type": "image/png", "sizes": "512x512" }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0A1A3A",
+  "background_color": "#0A1A3A"
+}

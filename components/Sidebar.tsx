@@ -15,7 +15,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Início', icon: 'home' },
-  { href: '/ocorrencias', label: 'Ocorrências', icon: 'alert-circle' },
+  { href: '/ordens', label: 'Ordens de Serviço', icon: 'clipboard-outline' },
+  { href: '/mensagens', label: 'Mensagens', icon: 'notifications-outline' },
   { href: '/prestadores', label: 'Prestadores', icon: 'briefcase' },
   { href: '/equipamentos', label: 'Equipamentos', icon: 'hardware-chip' },
   { href: '/manutencao', label: 'Manutenção', icon: 'construct' },

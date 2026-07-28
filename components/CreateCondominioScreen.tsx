@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../lib/auth-context';
 import { supabase } from '../lib/supabase';
-import { colors, fontFamily, fontSize, spacing } from '../lib/theme';
+import { colors, fontFamily, fontSize, layout, spacing } from '../lib/theme';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Logo } from './ui/Logo';
@@ -44,34 +44,41 @@ export function CreateCondominioScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Logo size="lg" showWordmark={false} />
-          <Text style={styles.title}>Criar seu condomínio</Text>
-          <Text style={styles.subtitle}>
-            Sua conta ainda não está associada a um condomínio. Preencha os dados abaixo — você vira o síndico dele
-            automaticamente.
-          </Text>
+        <View style={styles.formColumn}>
+          <View style={styles.header}>
+            <Logo size="lg" showWordmark={false} />
+            <Text style={styles.title}>Criar seu condomínio</Text>
+            <Text style={styles.subtitle}>
+              Sua conta ainda não está associada a um condomínio. Preencha os dados abaixo — você vira o síndico dele
+              automaticamente.
+            </Text>
+          </View>
+
+          <Card style={styles.card}>
+            <TextField
+              label="Nome do condomínio"
+              value={name}
+              onChangeText={setName}
+              placeholder="Ex: Edifício Aurora"
+            />
+            <TextField label="CNPJ (opcional)" value={cnpj} onChangeText={setCnpj} placeholder="00.000.000/0000-00" />
+            <TextField label="Endereço (opcional)" value={address} onChangeText={setAddress} />
+            <TextField label="Telefone (opcional)" value={phone} onChangeText={setPhone} />
+            <TextField
+              label="Administradora (opcional)"
+              value={administradora}
+              onChangeText={setAdministradora}
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Button title="Criar condomínio" onPress={submit} loading={saving} style={styles.button} />
+          </Card>
+
+          <Pressable onPress={signOut}>
+            <Text style={styles.hint}>Entrou com a conta errada? Sair</Text>
+          </Pressable>
         </View>
-
-        <Card style={styles.card}>
-          <TextField label="Nome do condomínio" value={name} onChangeText={setName} placeholder="Ex: Edifício Aurora" />
-          <TextField label="CNPJ (opcional)" value={cnpj} onChangeText={setCnpj} placeholder="00.000.000/0000-00" />
-          <TextField label="Endereço (opcional)" value={address} onChangeText={setAddress} />
-          <TextField label="Telefone (opcional)" value={phone} onChangeText={setPhone} />
-          <TextField
-            label="Administradora (opcional)"
-            value={administradora}
-            onChangeText={setAdministradora}
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Button title="Criar condomínio" onPress={submit} loading={saving} style={styles.button} />
-        </Card>
-
-        <Pressable onPress={signOut}>
-          <Text style={styles.hint}>Entrou com a conta errada? Sair</Text>
-        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -79,7 +86,14 @@ export function CreateCondominioScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing['3xl'],
+  },
+  formColumn: { width: '100%', maxWidth: layout.maxFormWidth },
   header: { alignItems: 'center', marginBottom: spacing['2xl'] },
   title: {
     fontFamily: fontFamily.extrabold,

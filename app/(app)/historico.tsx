@@ -17,7 +17,7 @@ type TypeFilter = 'todos' | FeedItem['kind'];
 
 const TYPE_LABELS: Record<TypeFilter, string> = {
   todos: 'Todos',
-  occurrence: 'Ocorrências',
+  occurrence: 'Ordens de Serviço',
   task: 'Tarefas',
   maintenance: 'Manutenção',
   document: 'Documentos',

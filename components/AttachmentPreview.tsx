@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, type ImageStyle, type StyleProp } from 'react-native';
 import { getSignedUrl } from '../lib/storage';
 import { colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
+import { ImageViewerModal } from './ImageViewerModal';
 import { RemoteImage } from './RemoteImage';
 
 interface Props {
@@ -12,8 +14,17 @@ interface Props {
 }
 
 export function AttachmentPreview({ path, mimeType, fileName, style }: Props) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+
   if (mimeType.startsWith('image/')) {
-    return <RemoteImage path={path} style={style} />;
+    return (
+      <>
+        <Pressable onPress={() => setViewerOpen(true)}>
+          <RemoteImage path={path} style={style} />
+        </Pressable>
+        <ImageViewerModal visible={viewerOpen} paths={[path]} onClose={() => setViewerOpen(false)} />
+      </>
+    );
   }
 
   async function open() {

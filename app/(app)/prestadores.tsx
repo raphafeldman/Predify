@@ -8,21 +8,11 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
+import { CATEGORY_LABEL } from '../../lib/categories';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { colors, floatingShadow, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { ServiceRequest, ServiceRequestStatus } from '../../lib/types';
-
-export const CATEGORY_LABEL: Record<string, string> = {
-  infiltracao: 'Infiltração',
-  eletrica: 'Elétrica',
-  hidraulica: 'Hidráulica',
-  estrutural: 'Estrutural',
-  pintura: 'Pintura',
-  portas_janelas: 'Portas e janelas',
-  elevador: 'Elevador',
-  outro: 'Outro',
-};
 
 const STATUS_LABEL: Record<ServiceRequestStatus, string> = {
   aberta: 'Aberta',
@@ -48,7 +38,7 @@ export function buildShareText(req: ServiceRequest) {
     `Categoria: ${CATEGORY_LABEL[req.category] ?? req.category}`,
   ];
   if (req.notes) lines.push(`Detalhes: ${req.notes}`);
-  lines.push('', 'Enviado pelo app Zelo.');
+  lines.push('', 'Enviado pelo app Predify.');
   return lines.join('\n');
 }
 

@@ -12,6 +12,7 @@ export interface Profile {
   id: string;
   full_name: string;
   role: Role;
+  job_title: string | null;
   phone: string | null;
   avatar_url: string | null;
   active: boolean;
@@ -128,16 +129,22 @@ export interface Task {
 }
 
 export type OccurrenceSeverity = 'baixa' | 'media' | 'alta';
-export type OccurrenceStatus = 'aberta' | 'resolvida';
+export type OccurrenceStatus = 'aberta' | 'em_andamento' | 'concluida' | 'cancelada';
 
+// "Ocorrência" é o nome interno (tabela/tipo) da Ordem de Serviço — ver
+// lib/categories.ts para o dicionário de categorias.
 export interface Occurrence {
   id: string;
+  os_number: number;
   title: string;
   description: string;
   severity: OccurrenceSeverity;
   status: OccurrenceStatus;
+  category: string;
+  estimated_cost: number | null;
   photo_urls: string[];
   created_by: string;
+  assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
 }
@@ -160,6 +167,17 @@ export interface Comment {
   record_id: string;
   author_id: string;
   body: string;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  record_type: RecordType | null;
+  record_id: string | null;
+  read: boolean;
   created_at: string;
 }
 

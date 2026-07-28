@@ -5,6 +5,7 @@ import type { RecordType } from '../lib/types';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
 import { Badge } from './ui/Badge';
 import { CommentsThread } from './CommentsThread';
+import { ImageViewerModal } from './ImageViewerModal';
 import { RemoteImage } from './RemoteImage';
 
 interface Props {
@@ -27,6 +28,7 @@ export function RecordCard({
   children,
 }: Props) {
   const [showComments, setShowComments] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   return (
     <View style={styles.card}>
@@ -39,10 +41,21 @@ export function RecordCard({
 
       {photoPaths && photoPaths.length > 0 && (
         <ScrollView horizontal style={styles.photosRow} showsHorizontalScrollIndicator={false}>
-          {photoPaths.map((path) => (
-            <RemoteImage key={path} path={path} style={styles.photo} />
+          {photoPaths.map((path, index) => (
+            <Pressable key={path} onPress={() => setViewerIndex(index)}>
+              <RemoteImage path={path} style={styles.photo} />
+            </Pressable>
           ))}
         </ScrollView>
+      )}
+
+      {photoPaths && (
+        <ImageViewerModal
+          visible={viewerIndex !== null}
+          paths={photoPaths}
+          initialIndex={viewerIndex ?? 0}
+          onClose={() => setViewerIndex(null)}
+        />
       )}
 
       <Pressable style={styles.commentsToggleRow} onPress={() => setShowComments((v) => !v)}>

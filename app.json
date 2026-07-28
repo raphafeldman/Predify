@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Zelo",
-    "slug": "condominio-app",
+    "name": "Predify",
+    "slug": "predify",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "condominioapp",
+    "scheme": "predify",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -16,10 +16,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#6C5CE7",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#0A1A3A",
+        "foregroundImage": "./assets/icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -28,7 +26,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -42,14 +40,14 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#6C5CE7"
+          "color": "#0A1A3A"
         }
       ],
       "expo-font",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#6C5CE7",
+          "backgroundColor": "#0A1A3A",
           "image": "./assets/icon.png",
           "imageWidth": 120
         }

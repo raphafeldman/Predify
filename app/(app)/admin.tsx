@@ -302,8 +302,8 @@ function CreateSindicoModal({
       setError('Preencha nome, e-mail e senha.');
       return;
     }
-    if (password.length < 6) {
-      setError('A senha precisa ter pelo menos 6 caracteres.');
+    if (password.length < 8) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
     setSaving(true);
@@ -355,7 +355,7 @@ function CreateSindicoModal({
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          placeholder="mínimo 6 caracteres"
+          placeholder="mínimo 8 caracteres"
         />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

@@ -1255,3 +1255,392 @@ $$;
 
 revoke execute on function public.condominio_usage_stats() from public;
 grant execute on function public.condominio_usage_stats() to authenticated;
+
+-- ============================================================
+-- Migração: Ordens de Serviço — a Ocorrência ganha número de OS
+-- (sequencial por condomínio), categoria, custo estimado e um status
+-- intermediário "em_andamento". Continua sendo a mesma tabela
+-- (occurrences) por baixo dos panos; só o nome visível pro usuário muda.
+-- ============================================================
+
+-- Contador por condomínio, usado pra gerar o número da próxima OS.
+alter table public.condominios add column if not exists next_os_number integer not null default 1;
+
+alter table public.occurrences add column if not exists os_number integer;
+alter table public.occurrences add column if not exists category text not null default 'outro';
+alter table public.occurrences add column if not exists estimated_cost numeric;
+
+alter table public.occurrences drop constraint if exists occurrences_category_check;
+alter table public.occurrences add constraint occurrences_category_check
+  check (category in ('infiltracao', 'eletrica', 'hidraulica', 'estrutural', 'pintura', 'portas_janelas', 'elevador', 'outro'));
+
+-- Status ganha "em_andamento" e "cancelada"; "resolvida" vira "concluida".
+update public.occurrences set status = 'concluida' where status = 'resolvida';
+alter table public.occurrences drop constraint if exists occurrences_status_check;
+alter table public.occurrences add constraint occurrences_status_check
+  check (status in ('aberta', 'em_andamento', 'concluida', 'cancelada'));
+
+-- Preenche os_number das ordens já existentes, sequencial por condomínio
+-- (ordenado pela data de criação), e ajusta o contador de cada condomínio
+-- pra continuar dali em diante.
+update public.occurrences o
+set os_number = sub.rn
+from (
+  select id, row_number() over (partition by condominio_id order by created_at) as rn
+  from public.occurrences
+  where os_number is null
+) sub
+where o.id = sub.id;
+
+update public.condominios c
+set next_os_number = sub.next_number
+from (
+  select condominio_id, max(os_number) + 1 as next_number
+  from public.occurrences
+  group by condominio_id
+) sub
+where c.id = sub.condominio_id;
+
+alter table public.occurrences alter column os_number set not null;
+alter table public.occurrences drop constraint if exists occurrences_os_number_unique;
+alter table public.occurrences add constraint occurrences_os_number_unique unique (condominio_id, os_number);
+
+-- Preenche o número da OS sozinho, incrementando o contador do condomínio
+-- de forma atômica (evita duas ordens criadas ao mesmo tempo com o mesmo
+-- número). Precisa rodar depois de stamp_condominio_id — o nome
+-- "stamp_os_number" vem depois de "stamp_condominio_id" em ordem
+-- alfabética, que é a ordem que o Postgres usa pra disparar gatilhos
+-- BEFORE INSERT do mesmo tipo na mesma tabela.
+create or replace function public.stamp_os_number()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_number integer;
+begin
+  update public.condominios
+  set next_os_number = next_os_number + 1
+  where id = new.condominio_id
+  returning next_os_number - 1 into v_number;
+  new.os_number := v_number;
+  return new;
+end;
+$$;
+
+drop trigger if exists stamp_os_number on public.occurrences;
+create trigger stamp_os_number
+  before insert on public.occurrences
+  for each row execute function public.stamp_os_number();
+
+-- ============================================================
+-- Migração: cargos de equipe, ordens atribuíveis, visibilidade privada
+-- por criador/atribuído (Ordens, Documentos, Tarefas) e portal de
+-- mensagens. Rotina e Manutenção continuam visíveis pra toda a equipe do
+-- condomínio, de propósito (ver notas no plano/commit).
+-- ============================================================
+
+-- Cargo é só rótulo de exibição — a permissão continua vindo de "role"
+-- (sindico/funcionario). Síndico não usa esse campo.
+alter table public.profiles add column if not exists job_title text;
+alter table public.profiles drop constraint if exists profiles_job_title_check;
+alter table public.profiles add constraint profiles_job_title_check
+  check (job_title is null or job_title in ('zelador', 'manutencista_1', 'manutencista_2', 'porteiro', 'faxineiro', 'outro'));
+
+-- handle_new_user passa a também gravar o cargo vindo do metadata (setado
+-- pela Edge Function admin-users).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name, role, phone, condominio_id, job_title)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data ->> 'role', 'funcionario'),
+    new.raw_user_meta_data ->> 'phone',
+    (new.raw_user_meta_data ->> 'condominio_id')::uuid,
+    new.raw_user_meta_data ->> 'job_title'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+-- Síndico atribui uma ordem de serviço a um funcionário pra ele resolver
+-- (mesmo padrão já usado em tasks/maintenance_items/checklist_templates).
+alter table public.occurrences add column if not exists assigned_to uuid references public.profiles (id);
+
+-- Visibilidade: funcionário só vê o que ele criou (ou pro que foi
+-- designado); síndico sempre vê tudo do condomínio.
+drop policy if exists "occurrences_select" on public.occurrences;
+create policy "occurrences_select" on public.occurrences
+  for select to authenticated
+  using (
+    (
+      condominio_id = public.current_condominio_id()
+      and (created_by = auth.uid() or assigned_to = auth.uid() or public.is_sindico())
+    )
+    or public.is_platform_admin()
+  );
+
+drop policy if exists "occurrences_update" on public.occurrences;
+create policy "occurrences_update" on public.occurrences
+  for update to authenticated
+  using (
+    (
+      (created_by = auth.uid() or assigned_to = auth.uid() or public.is_sindico())
+      and condominio_id = public.current_condominio_id()
+    )
+    or public.is_platform_admin()
+  );
+
+drop policy if exists "documents_select" on public.documents;
+create policy "documents_select" on public.documents
+  for select to authenticated
+  using (
+    (
+      condominio_id = public.current_condominio_id()
+      and (created_by = auth.uid() or public.is_sindico())
+    )
+    or public.is_platform_admin()
+  );
+
+drop policy if exists "tasks_select" on public.tasks;
+create policy "tasks_select" on public.tasks
+  for select to authenticated
+  using (
+    (
+      condominio_id = public.current_condominio_id()
+      and (created_by = auth.uid() or assigned_to = auth.uid() or public.is_sindico())
+    )
+    or public.is_platform_admin()
+  );
+
+drop policy if exists "tasks_update" on public.tasks;
+create policy "tasks_update" on public.tasks
+  for update to authenticated
+  using (
+    (
+      condominio_id = public.current_condominio_id()
+      and (created_by = auth.uid() or assigned_to = auth.uid() or public.is_sindico())
+    )
+    or public.is_platform_admin()
+  );
+
+-- comments_select precisa acompanhar a mesma regra do registro pai —
+-- senão dava pra ler o comentário de uma ordem/documento/tarefa que a
+-- pessoa não tem mais acesso pra ver na tela. Rotina, manutenção e
+-- solicitação de orçamento continuam liberados pra toda a equipe do
+-- condomínio, sem mudança.
+drop policy if exists "comments_select" on public.comments;
+create policy "comments_select" on public.comments
+  for select to authenticated
+  using (
+    condominio_id = public.current_condominio_id()
+    and (
+      (record_type = 'occurrence' and exists (
+        select 1 from public.occurrences o
+        where o.id = comments.record_id
+          and (o.created_by = auth.uid() or o.assigned_to = auth.uid() or public.is_sindico())
+      ))
+      or (record_type = 'document' and exists (
+        select 1 from public.documents d
+        where d.id = comments.record_id
+          and (d.created_by = auth.uid() or public.is_sindico())
+      ))
+      or (record_type = 'task' and exists (
+        select 1 from public.tasks t
+        where t.id = comments.record_id
+          and (t.created_by = auth.uid() or t.assigned_to = auth.uid() or public.is_sindico())
+      ))
+      or record_type in ('maintenance_record', 'checklist_entry', 'service_request')
+    )
+    or public.is_platform_admin()
+  );
+
+-- ============================================================
+-- Portal de mensagens: notificações internas (independente do push, que
+-- pode falhar/ser ignorado) — cada usuário só vê as suas.
+-- ============================================================
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  condominio_id uuid not null references public.condominios (id),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  title text not null,
+  body text not null,
+  record_type text,
+  record_id uuid,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_select" on public.notifications;
+create policy "notifications_select" on public.notifications
+  for select to authenticated
+  using (user_id = auth.uid() or public.is_platform_admin());
+
+drop policy if exists "notifications_update" on public.notifications;
+create policy "notifications_update" on public.notifications
+  for update to authenticated
+  using (user_id = auth.uid() or public.is_platform_admin());
+
+-- Sem política de insert: só os gatilhos abaixo (security definer)
+-- escrevem aqui.
+
+create or replace function public.notify_os_assigned()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, net
+as $$
+declare
+  token record;
+begin
+  if new.assigned_to is not null and new.assigned_to is distinct from old.assigned_to then
+    insert into public.notifications (condominio_id, user_id, title, body, record_type, record_id)
+    values (
+      new.condominio_id,
+      new.assigned_to,
+      'Nova ordem de serviço atribuída a você',
+      'OS #' || new.os_number || ' — ' || left(new.title, 100),
+      'occurrence',
+      new.id
+    );
+
+    for token in
+      select expo_push_token from public.push_tokens where user_id = new.assigned_to
+    loop
+      perform net.http_post(
+        url := 'https://exp.host/--/api/v2/push/send',
+        headers := jsonb_build_object('Content-Type', 'application/json'),
+        body := jsonb_build_object(
+          'to', token.expo_push_token,
+          'title', 'Nova ordem de serviço atribuída a você',
+          'body', 'OS #' || new.os_number || ' — ' || left(new.title, 100),
+          'data', jsonb_build_object('occurrence_id', new.id)
+        )
+      );
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_occurrence_assigned on public.occurrences;
+create trigger on_occurrence_assigned
+  after update on public.occurrences
+  for each row execute function public.notify_os_assigned();
+
+create or replace function public.notify_os_completed()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, net
+as $$
+declare
+  sindico record;
+  token record;
+begin
+  if new.status = 'concluida' and old.status is distinct from new.status and new.assigned_to is not null then
+    for sindico in
+      select id from public.profiles
+      where role = 'sindico' and condominio_id = new.condominio_id and active = true
+    loop
+      insert into public.notifications (condominio_id, user_id, title, body, record_type, record_id)
+      values (
+        new.condominio_id,
+        sindico.id,
+        'Ordem de serviço concluída',
+        'OS #' || new.os_number || ' — ' || left(new.title, 100),
+        'occurrence',
+        new.id
+      );
+
+      for token in
+        select expo_push_token from public.push_tokens where user_id = sindico.id
+      loop
+        perform net.http_post(
+          url := 'https://exp.host/--/api/v2/push/send',
+          headers := jsonb_build_object('Content-Type', 'application/json'),
+          body := jsonb_build_object(
+            'to', token.expo_push_token,
+            'title', 'Ordem de serviço concluída',
+            'body', 'OS #' || new.os_number || ' — ' || left(new.title, 100),
+            'data', jsonb_build_object('occurrence_id', new.id)
+          )
+        );
+      end loop;
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_occurrence_completed on public.occurrences;
+create trigger on_occurrence_completed
+  after update on public.occurrences
+  for each row execute function public.notify_os_completed();
+
+-- ============================================================
+-- Migração: agente de WhatsApp (fase 1 — só envio: lembrete diário de
+-- pendências e aviso avulso do síndico). O token de verdade da Meta nunca
+-- entra aqui — mora só nas Edge Functions (Deno.env), mesmo padrão de
+-- SUPABASE_SERVICE_ROLE_KEY. O gatilho de cron abaixo só chama a Edge
+-- Function usando a anon key (pública, não é segredo).
+-- ============================================================
+create table if not exists public.whatsapp_messages (
+  id uuid primary key default gen_random_uuid(),
+  condominio_id uuid not null references public.condominios (id),
+  user_id uuid not null references public.profiles (id),
+  phone text not null,
+  kind text not null check (kind in ('lembrete_diario', 'aviso_sindico')),
+  body text not null,
+  status text not null check (status in ('enviado', 'falha')),
+  error text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.whatsapp_messages enable row level security;
+
+drop policy if exists "whatsapp_messages_select" on public.whatsapp_messages;
+create policy "whatsapp_messages_select" on public.whatsapp_messages
+  for select to authenticated
+  using (
+    (condominio_id = public.current_condominio_id() and public.is_sindico())
+    or public.is_platform_admin()
+  );
+
+-- Sem política de insert: só as Edge Functions (service role) escrevem.
+
+-- IMPORTANTE: troque <SUA-ANON-KEY> pelo valor real (Project Settings >
+-- API > anon public key — o mesmo que já está no seu .env) antes de rodar
+-- esse bloco. Sem isso o cron chama a função sem autenticação válida.
+create or replace function public.trigger_whatsapp_daily_digest()
+returns void
+language plpgsql
+security definer
+set search_path = public, net
+as $$
+begin
+  perform net.http_post(
+    url := 'https://qkatokyhufovtwwhowzo.supabase.co/functions/v1/whatsapp-daily-digest',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <SUA-ANON-KEY>'),
+    body := '{}'::jsonb
+  );
+end;
+$$;
+
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'whatsapp-daily-digest') then
+    perform cron.unschedule('whatsapp-daily-digest');
+  end if;
+  perform cron.schedule('whatsapp-daily-digest', '0 10 * * *', $cron$select public.trigger_whatsapp_daily_digest();$cron$);
+end $$;

@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Logo } from '../../components/ui/Logo';
 import { TextField } from '../../components/ui/TextField';
 import { supabase } from '../../lib/supabase';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/theme';
+import { colors, fontFamily, fontSize, layout, spacing } from '../../lib/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -22,8 +22,8 @@ export default function SignupScreen() {
       setError('Preencha nome, e-mail e senha.');
       return;
     }
-    if (password.length < 6) {
-      setError('A senha precisa ter pelo menos 6 caracteres.');
+    if (password.length < 8) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
     setError(null);
@@ -52,14 +52,16 @@ export default function SignupScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <View style={styles.header}>
-            <Logo size="lg" showWordmark={false} />
-            <Text style={styles.title}>Confirme seu e-mail</Text>
-            <Text style={styles.subtitle}>
-              Enviamos um link de confirmação para {email.trim()}. Depois de confirmar, volte e entre normalmente.
-            </Text>
+          <View style={styles.formColumn}>
+            <View style={styles.header}>
+              <Logo size="lg" showWordmark={false} />
+              <Text style={styles.title}>Confirme seu e-mail</Text>
+              <Text style={styles.subtitle}>
+                Enviamos um link de confirmação para {email.trim()}. Depois de confirmar, volte e entre normalmente.
+              </Text>
+            </View>
+            <Button title="Voltar para o login" onPress={() => router.replace('/login')} />
           </View>
-          <Button title="Voltar para o login" onPress={() => router.replace('/login')} />
         </View>
       </View>
     );
@@ -68,39 +70,43 @@ export default function SignupScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Logo size="lg" showWordmark={false} />
-          <Text style={styles.title}>Criar conta</Text>
-          <Text style={styles.subtitle}>Depois de criar sua conta, você cadastra seu condomínio e vira o síndico dele.</Text>
+        <View style={styles.formColumn}>
+          <View style={styles.header}>
+            <Logo size="lg" showWordmark={false} />
+            <Text style={styles.title}>Criar conta</Text>
+            <Text style={styles.subtitle}>
+              Depois de criar sua conta, você cadastra seu condomínio e vira o síndico dele.
+            </Text>
+          </View>
+
+          <Card style={styles.card}>
+            <TextField label="Nome" value={fullName} onChangeText={setFullName} placeholder="Seu nome completo" />
+            <TextField
+              label="E-mail"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              placeholder="seu@email.com"
+            />
+            <TextField
+              label="Senha"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="mínimo 8 caracteres"
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Button title="Criar conta" onPress={handleSubmit} loading={submitting} style={styles.button} />
+          </Card>
+
+          <Pressable onPress={() => router.replace('/login')}>
+            <Text style={styles.hint}>Já tem conta? Entrar</Text>
+          </Pressable>
         </View>
-
-        <Card style={styles.card}>
-          <TextField label="Nome" value={fullName} onChangeText={setFullName} placeholder="Seu nome completo" />
-          <TextField
-            label="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="seu@email.com"
-          />
-          <TextField
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="mínimo 6 caracteres"
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Button title="Criar conta" onPress={handleSubmit} loading={submitting} style={styles.button} />
-        </Card>
-
-        <Pressable onPress={() => router.replace('/login')}>
-          <Text style={styles.hint}>Já tem conta? Entrar</Text>
-        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -115,7 +121,14 @@ function traduzErro(message: string) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing['3xl'],
+  },
+  formColumn: { width: '100%', maxWidth: layout.maxFormWidth },
   header: { alignItems: 'center', marginBottom: spacing['2xl'] },
   title: {
     fontFamily: fontFamily.extrabold,

@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Logo } from '../../components/ui/Logo';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
-import { colors, fontFamily, fontSize, spacing } from '../../lib/theme';
+import { colors, fontFamily, fontSize, layout, spacing } from '../../lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -31,43 +31,54 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Logo size="lg" showWordmark={false} />
-          <Text style={styles.title}>Zelo</Text>
-          <Text style={styles.subtitle}>Gestão de condomínio, do jeito simples</Text>
+        <View style={styles.formColumn}>
+          <View style={styles.header}>
+            <Logo size="lg" showWordmark={false} />
+            <Text style={styles.title}>Predify</Text>
+            <Text style={styles.slogan}>
+              <Text style={styles.sloganNavy}>Facilities em dia.</Text>
+              {'\n'}
+              <Text style={styles.sloganTeal}>Condomínio em ordem.</Text>
+            </Text>
+            <Text style={styles.subtitle}>Gestão inteligente para síndicos e condomínios</Text>
+          </View>
+
+          {blockedMessage ? <Text style={styles.blocked}>{blockedMessage}</Text> : null}
+
+          <Card style={styles.card}>
+            <TextField
+              label="E-mail"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              placeholder="seu@email.com"
+            />
+            <TextField
+              label="Senha"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="••••••••"
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Button title="Entrar" onPress={handleSubmit} loading={submitting} style={styles.button} />
+
+            <Pressable onPress={() => router.push('/esqueci-senha')}>
+              <Text style={styles.forgotLink}>Esqueci minha senha</Text>
+            </Pressable>
+          </Card>
+
+          <Pressable onPress={() => router.push('/signup')}>
+            <Text style={styles.hint}>Ainda não tem condomínio cadastrado? Criar conta</Text>
+          </Pressable>
+          <Text style={styles.hintSmall}>
+            Se seu síndico já te cadastrou, é só entrar com o e-mail e a senha que ele criou.
+          </Text>
         </View>
-
-        {blockedMessage ? <Text style={styles.blocked}>{blockedMessage}</Text> : null}
-
-        <Card style={styles.card}>
-          <TextField
-            label="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="seu@email.com"
-          />
-          <TextField
-            label="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="••••••••"
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Button title="Entrar" onPress={handleSubmit} loading={submitting} style={styles.button} />
-        </Card>
-
-        <Pressable onPress={() => router.push('/signup')}>
-          <Text style={styles.hint}>Ainda não tem condomínio cadastrado? Criar conta</Text>
-        </Pressable>
-        <Text style={styles.hintSmall}>
-          Se seu síndico já te cadastrou, é só entrar com o e-mail e a senha que ele criou.
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -75,7 +86,14 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing['3xl'],
+  },
+  formColumn: { width: '100%', maxWidth: layout.maxFormWidth },
   header: { alignItems: 'center', marginBottom: spacing['2xl'] },
   title: {
     fontFamily: fontFamily.extrabold,
@@ -83,11 +101,20 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: spacing.md,
   },
+  slogan: {
+    fontFamily: fontFamily.bold,
+    fontSize: fontSize.lg,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: fontSize.lg + 6,
+  },
+  sloganNavy: { color: colors.primary },
+  sloganTeal: { color: colors.accent },
   subtitle: {
     fontFamily: fontFamily.regular,
     fontSize: fontSize.sm,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   card: { gap: 0 },
@@ -108,6 +135,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   button: { marginTop: spacing.xl },
+  forgotLink: {
+    fontFamily: fontFamily.semibold,
+    textAlign: 'center',
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    fontSize: fontSize.sm,
+  },
   hint: {
     fontFamily: fontFamily.semibold,
     textAlign: 'center',

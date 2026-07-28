@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
     const fullName = body?.full_name?.trim();
     const role = body?.role === 'sindico' ? 'sindico' : 'funcionario';
     const phone = body?.phone?.trim() || undefined;
+    const jobTitle = role === 'funcionario' ? body?.job_title || undefined : undefined;
 
     // Síndico só cadastra gente pro próprio condomínio (nunca vem do
     // cliente). Administrador da plataforma precisa indicar pra qual
@@ -104,8 +105,8 @@ Deno.serve(async (req) => {
     if (!email || !password || !fullName) {
       return jsonResponse({ error: 'Preencha e-mail, senha e nome.' }, 400);
     }
-    if (password.length < 6) {
-      return jsonResponse({ error: 'A senha precisa ter pelo menos 6 caracteres.' }, 400);
+    if (password.length < 8) {
+      return jsonResponse({ error: 'A senha precisa ter pelo menos 8 caracteres.' }, 400);
     }
 
     const adminClient = createClient(supabaseUrl, getServiceRoleKey());
@@ -164,7 +165,7 @@ Deno.serve(async (req) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName, role, phone, condominio_id: targetCondominioId },
+      user_metadata: { full_name: fullName, role, phone, condominio_id: targetCondominioId, job_title: jobTitle },
     });
 
     if (createError) {

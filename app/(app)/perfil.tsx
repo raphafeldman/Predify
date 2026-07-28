@@ -27,9 +27,27 @@ export default function PerfilScreen() {
 
       {!isPlatformAdmin && (
         <>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/mensagens')}>
+            <Ionicons name="notifications-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Mensagens</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
+
+          <Pressable style={styles.linkRow} onPress={() => router.push('/documentos')}>
+            <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Documentos</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
+
           <Pressable style={styles.linkRow} onPress={() => router.push('/equipamentos')}>
             <Ionicons name="hardware-chip-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.linkText}>Equipamentos</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
+
+          <Pressable style={styles.linkRow} onPress={() => router.push('/prestadores')}>
+            <Ionicons name="briefcase-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Prestadores</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
           </Pressable>
 
@@ -54,11 +72,6 @@ export default function PerfilScreen() {
           <Pressable style={styles.linkRow} onPress={() => router.push('/rotinas')}>
             <Ionicons name="repeat-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.linkText}>Gerenciar rotinas</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
-          </Pressable>
-          <Pressable style={styles.linkRow} onPress={() => router.push('/relatorios')}>
-            <Ionicons name="bar-chart-outline" size={18} color={colors.textSecondary} />
-            <Text style={styles.linkText}>Relatórios</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
           </Pressable>
           <Pressable style={styles.linkRow} onPress={() => router.push('/equipe')}>

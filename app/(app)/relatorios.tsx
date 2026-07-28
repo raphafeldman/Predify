@@ -11,7 +11,8 @@ import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
-import type { Condominio } from '../../lib/types';
+import type { Condominio, OccurrenceStatus } from '../../lib/types';
+import { STATUS_LABEL } from './ordens';
 
 type PeriodFilter = 'diario' | 'semanal' | 'mensal' | 'anual';
 
@@ -63,7 +64,7 @@ interface ReportData {
   maintenanceRecords: number;
   checklistDone: number;
   itemsByCategory: {
-    Ocorrências: ReportItem[];
+    'Ordens de Serviço': ReportItem[];
     Tarefas: ReportItem[];
     Manutenções: ReportItem[];
     Rotina: ReportItem[];
@@ -71,7 +72,7 @@ interface ReportData {
 }
 
 const CATEGORY_ORDER: (keyof ReportData['itemsByCategory'])[] = [
-  'Ocorrências',
+  'Ordens de Serviço',
   'Tarefas',
   'Manutenções',
   'Rotina',
@@ -121,17 +122,17 @@ export default function RelatoriosScreen() {
     const checklist = checklistRes.data ?? [];
 
     setData({
-      occurrencesResolved: occurrences.filter((o) => o.status === 'resolvida').length,
-      occurrencesOpen: occurrences.filter((o) => o.status === 'aberta').length,
+      occurrencesResolved: occurrences.filter((o) => o.status === 'concluida').length,
+      occurrencesOpen: occurrences.filter((o) => o.status === 'aberta' || o.status === 'em_andamento').length,
       tasksDone: tasks.filter((t) => t.status === 'concluida').length,
       tasksPending: tasks.filter((t) => t.status === 'pendente').length,
       maintenanceRecords: maintenance.length,
       checklistDone: checklist.length,
       itemsByCategory: {
-        Ocorrências: occurrences
+        'Ordens de Serviço': occurrences
           .map((o) => ({
-            title: o.title,
-            status: o.status === 'resolvida' ? 'Resolvida' : 'Aberta',
+            title: `OS #${o.os_number} — ${o.title}`,
+            status: STATUS_LABEL[o.status as OccurrenceStatus] ?? o.status,
             date: o.created_at,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -290,7 +291,7 @@ export default function RelatoriosScreen() {
           <Text style={styles.sectionTitle}>Por categoria</Text>
           <BarChart
             data={[
-              { label: 'Ocorrências', value: data.occurrencesResolved + data.occurrencesOpen, color: colors.danger },
+              { label: 'Ordens de Serviço', value: data.occurrencesResolved + data.occurrencesOpen, color: colors.danger },
               { label: 'Tarefas', value: data.tasksDone + data.tasksPending, color: colors.warning },
               { label: 'Manutenções', value: data.maintenanceRecords, color: colors.primary },
               { label: 'Rotina', value: data.checklistDone, color: colors.success },

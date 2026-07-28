@@ -1,22 +1,25 @@
+// Paleta oficial da marca Predify (manual da marca): navy, teal/emerald,
+// cinza claro e branco. As demais variações (dark/light de cada uma,
+// cinzas de texto) são derivadas dessas quatro pra manter consistência.
 export const colors = {
-  primary: '#6C5CE7',
-  primaryDark: '#5849C4',
-  primaryLight: '#F0EEFE',
-  accent: '#FF9F43',
-  accentLight: '#FFF3E4',
+  primary: '#0A1A3A',
+  primaryDark: '#071226',
+  primaryLight: '#E4E8F0',
+  accent: '#00B388',
+  accentLight: '#E0F6EF',
 
-  textPrimary: '#1F2133',
-  textSecondary: '#6B7280',
-  textMuted: '#9CA3AF',
+  textPrimary: '#0A1A3A',
+  textSecondary: '#5B6472',
+  textMuted: '#9AA3AF',
   textOnPrimary: '#FFFFFF',
 
-  border: '#E7E5F0',
+  border: '#E6E8EC',
   surface: '#FFFFFF',
-  surfaceAlt: '#F8F7FC',
-  background: '#FBFAFE',
+  surfaceAlt: '#F5F6F9',
+  background: '#F8F9FB',
 
-  success: '#22C55E',
-  successLight: '#DCFCE7',
+  success: '#00B388',
+  successLight: '#E0F6EF',
   warning: '#F59E0B',
   warningLight: '#FEF3C7',
   danger: '#EF4444',
@@ -24,11 +27,11 @@ export const colors = {
 };
 
 export const fontFamily = {
-  regular: 'PlusJakartaSans_400Regular',
-  medium: 'PlusJakartaSans_500Medium',
-  semibold: 'PlusJakartaSans_600SemiBold',
-  bold: 'PlusJakartaSans_700Bold',
-  extrabold: 'PlusJakartaSans_800ExtraBold',
+  regular: 'Poppins_400Regular',
+  medium: 'Poppins_500Medium',
+  semibold: 'Poppins_600SemiBold',
+  bold: 'Poppins_700Bold',
+  extrabold: 'Poppins_800ExtraBold',
 };
 
 export const fontSize = {
@@ -61,9 +64,16 @@ export const radius = {
   pill: 999,
 };
 
+/** Larguras máximas de conteúdo na versão web — sem isso, tudo estica até
+ * a borda da janela em monitores largos (bom no celular, ruim no desktop). */
+export const layout = {
+  maxContentWidth: 1100,
+  maxFormWidth: 440,
+};
+
 /** Sombra suave e consistente para cards elevados (iOS + Android). */
 export const cardShadow = {
-  shadowColor: '#1F2133',
+  shadowColor: '#0A1A3A',
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.06,
   shadowRadius: 12,
@@ -72,7 +82,7 @@ export const cardShadow = {
 
 /** Sombra mais forte, para elementos flutuantes (FAB, botão de exportar). */
 export const floatingShadow = {
-  shadowColor: '#1F2133',
+  shadowColor: '#0A1A3A',
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.18,
   shadowRadius: 16,

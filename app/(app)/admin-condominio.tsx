@@ -78,7 +78,7 @@ export default function AdminCondominioScreen() {
     if (requestsRes.data) setPrestadores(requestsRes.data as ServiceRequest[]);
 
     const occurrences = (occRes.data as Occurrence[]) ?? [];
-    setOpenOccurrences(occurrences.filter((o) => o.status === 'aberta').length);
+    setOpenOccurrences(occurrences.filter((o) => o.status !== 'concluida' && o.status !== 'cancelada').length);
 
     const merged: FeedItem[] = [
       ...occurrences.map((d) => ({ kind: 'occurrence' as const, id: d.id, created_at: d.created_at, data: d })),
@@ -136,7 +136,7 @@ export default function AdminCondominioScreen() {
       <DashboardSummary
         stats={[
           { label: 'Usuários', value: String(equipe.length), color: colors.primary },
-          { label: 'Ocorrências abertas', value: String(openOccurrences), color: colors.danger },
+          { label: 'Ordens abertas', value: String(openOccurrences), color: colors.danger },
           { label: 'Equipamentos', value: String(equipamentos.length), color: colors.warning },
           { label: 'Prestadores', value: String(prestadores.length), color: colors.success },
         ]}

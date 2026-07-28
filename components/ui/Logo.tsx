@@ -1,6 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fontFamily, fontSize, radius } from '../../lib/theme';
+import { Image, StyleSheet, View } from 'react-native';
+
+// logo-predify-cropped.png é o logo-predify.png original com a margem
+// transparente em excesso recortada — sem isso, o desenho fica minúsculo
+// quando exibido pequeno (barra lateral, perfil).
+const wordmarkLogo = require('../../assets/logo-predify-cropped.png');
+const iconLogo = require('../../assets/icon.png');
+const WORDMARK_ASPECT_RATIO = 1024 / 316;
 
 interface Props {
   size?: 'sm' | 'lg';
@@ -9,39 +14,33 @@ interface Props {
 
 export function Logo({ size = 'sm', showWordmark = true }: Props) {
   const markSize = size === 'lg' ? 64 : 34;
-  const iconSize = size === 'lg' ? 32 : 18;
+
+  if (!showWordmark) {
+    return (
+      <View style={styles.row}>
+        <Image
+          source={iconLogo}
+          style={[styles.icon, { width: markSize, height: markSize, borderRadius: markSize * 0.22 }]}
+          resizeMode="cover"
+        />
+      </View>
+    );
+  }
+
+  const wordmarkHeight = size === 'lg' ? 40 : 30;
 
   return (
     <View style={styles.row}>
-      <View
-        style={[
-          styles.mark,
-          { width: markSize, height: markSize, borderRadius: markSize / 2 },
-        ]}
-      >
-        <Ionicons name="shield-checkmark" size={iconSize} color={colors.textOnPrimary} />
-      </View>
-      {showWordmark && (
-        <Text style={[styles.wordmark, size === 'lg' && styles.wordmarkLg]}>Zelo</Text>
-      )}
+      <Image
+        source={wordmarkLogo}
+        style={{ height: wordmarkHeight, width: wordmarkHeight * WORDMARK_ASPECT_RATIO }}
+        resizeMode="contain"
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  mark: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-  },
-  wordmark: {
-    fontFamily: fontFamily.extrabold,
-    fontSize: fontSize.xl,
-    color: colors.textPrimary,
-  },
-  wordmarkLg: {
-    fontSize: fontSize['2xl'],
-  },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  icon: {},
 });

@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
+import { JOB_TITLE_LABEL } from '../../lib/jobTitles';
 import { supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Profile, Role } from '../../lib/types';
@@ -67,7 +68,7 @@ export default function EquipeScreen() {
             <Pressable style={styles.row} onPress={() => setEditing(item)}>
               <Text style={[styles.tableCell, styles.tableCellStrong, { flex: 2 }]}>{item.full_name}</Text>
               <Text style={[styles.tableCell, { flex: 1 }]}>
-                {item.role === 'sindico' ? 'Síndico' : 'Funcionário'}
+                {item.role === 'sindico' ? 'Síndico' : JOB_TITLE_LABEL[item.job_title ?? ''] ?? 'Funcionário'}
               </Text>
               <Text style={[styles.tableCell, { flex: 1 }]}>{item.phone ?? '—'}</Text>
               <View style={{ flex: 1 }}>
@@ -79,7 +80,7 @@ export default function EquipeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.full_name}</Text>
                 <Text style={styles.meta}>
-                  {item.role === 'sindico' ? 'Síndico' : 'Funcionário'}
+                  {item.role === 'sindico' ? 'Síndico' : JOB_TITLE_LABEL[item.job_title ?? ''] ?? 'Funcionário'}
                   {item.phone ? ` • ${item.phone}` : ''}
                 </Text>
               </View>
@@ -110,6 +111,27 @@ export default function EquipeScreen() {
   );
 }
 
+function JobTitlePicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  return (
+    <>
+      <Text style={styles.label}>Cargo (opcional)</Text>
+      <View style={styles.optionsRow}>
+        {Object.keys(JOB_TITLE_LABEL).map((key) => (
+          <Pressable
+            key={key}
+            style={[styles.option, value === key && styles.optionActive]}
+            onPress={() => onChange(value === key ? null : key)}
+          >
+            <Text style={[styles.optionText, value === key && styles.optionTextActive]}>
+              {JOB_TITLE_LABEL[key]}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
+  );
+}
+
 function NewUserModal({
   visible,
   onClose,
@@ -124,6 +146,7 @@ function NewUserModal({
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<Role>('funcionario');
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -133,6 +156,7 @@ function NewUserModal({
     setPassword('');
     setPhone('');
     setRole('funcionario');
+    setJobTitle(null);
     setError(null);
   }
 
@@ -141,8 +165,8 @@ function NewUserModal({
       setError('Preencha nome, e-mail e senha.');
       return;
     }
-    if (password.length < 6) {
-      setError('A senha precisa ter pelo menos 6 caracteres.');
+    if (password.length < 8) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
     setSaving(true);
@@ -154,6 +178,7 @@ function NewUserModal({
         password,
         phone: phone.trim() || undefined,
         role,
+        job_title: role === 'funcionario' ? jobTitle ?? undefined : undefined,
       },
     });
     setSaving(false);
@@ -187,7 +212,7 @@ function NewUserModal({
           value={password}
           onChangeText={setPassword}
           secureTextEntry
-          placeholder="mínimo 6 caracteres"
+          placeholder="mínimo 8 caracteres"
         />
         <TextField label="Telefone (opcional)" value={phone} onChangeText={setPhone} placeholder="(11) 90000-0000" />
 
@@ -205,6 +230,8 @@ function NewUserModal({
             </Pressable>
           ))}
         </View>
+
+        {role === 'funcionario' && <JobTitlePicker value={jobTitle} onChange={setJobTitle} />}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -235,21 +262,83 @@ function EditProfileModal({
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<Role>('funcionario');
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPasswordField, setShowPasswordField] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [showWhatsappField, setShowWhatsappField] = useState(false);
+  const [whatsappMessage, setWhatsappMessage] = useState('');
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappMsg, setWhatsappMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name);
       setPhone(profile.phone ?? '');
       setRole(profile.role);
+      setJobTitle(profile.job_title);
       setActive(profile.active);
       setConfirmingBlock(false);
       setError(null);
+      setShowPasswordField(false);
+      setNewPassword('');
+      setPasswordMsg(null);
+      setShowWhatsappField(false);
+      setWhatsappMessage('');
+      setWhatsappMsg(null);
     }
   }, [profile]);
+
+  async function resetPassword() {
+    if (!profile) return;
+    if (newPassword.length < 8) {
+      setError('A nova senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
+    setResettingPassword(true);
+    setError(null);
+    setPasswordMsg(null);
+    const { data, error: invokeError } = await supabase.functions.invoke('admin-reset-password', {
+      body: { user_id: profile.id, password: newPassword },
+    });
+    setResettingPassword(false);
+    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    if (responseError) {
+      setError(responseError);
+      return;
+    }
+    setPasswordMsg('Senha redefinida com sucesso.');
+    setNewPassword('');
+    setShowPasswordField(false);
+  }
+
+  async function sendWhatsapp() {
+    if (!profile) return;
+    if (!whatsappMessage.trim()) {
+      setError('Escreva a mensagem do aviso.');
+      return;
+    }
+    setSendingWhatsapp(true);
+    setError(null);
+    setWhatsappMsg(null);
+    const { data, error: invokeError } = await supabase.functions.invoke('whatsapp-send', {
+      body: { user_id: profile.id, message: whatsappMessage.trim() },
+    });
+    setSendingWhatsapp(false);
+    const responseError = invokeError ? invokeError.message : (data as { error?: string } | null)?.error;
+    if (responseError) {
+      setError(responseError);
+      return;
+    }
+    setWhatsappMsg('Aviso enviado pelo WhatsApp.');
+    setWhatsappMessage('');
+    setShowWhatsappField(false);
+  }
 
   async function save() {
     if (!profile) return;
@@ -261,6 +350,7 @@ function EditProfileModal({
         full_name: fullName.trim(),
         phone: phone.trim() || null,
         role,
+        job_title: role === 'funcionario' ? jobTitle : null,
         active,
       })
       .eq('id', profile.id);
@@ -301,6 +391,8 @@ function EditProfileModal({
         </View>
         {isSelf && <Text style={styles.hintSmall}>Você não pode alterar seu próprio papel.</Text>}
 
+        {role === 'funcionario' && <JobTitlePicker value={jobTitle} onChange={setJobTitle} />}
+
         <Text style={styles.label}>Status</Text>
         {active ? (
           confirmingBlock ? (
@@ -340,6 +432,80 @@ function EditProfileModal({
           </Pressable>
         )}
         {isSelf && <Text style={styles.hintSmall}>Você não pode bloquear a si mesmo.</Text>}
+
+        {!isSelf && (
+          <>
+            <Text style={styles.label}>Senha</Text>
+            {showPasswordField ? (
+              <>
+                <TextField
+                  label="Nova senha"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                  placeholder="mínimo 8 caracteres"
+                />
+                <View style={styles.modalButtonsRow}>
+                  <Button
+                    title="Cancelar"
+                    variant="secondary"
+                    onPress={() => {
+                      setShowPasswordField(false);
+                      setNewPassword('');
+                    }}
+                    style={styles.flex1}
+                  />
+                  <Button
+                    title="Redefinir"
+                    onPress={resetPassword}
+                    loading={resettingPassword}
+                    style={styles.flex1}
+                  />
+                </View>
+              </>
+            ) : (
+              <Button title="Redefinir senha" variant="secondary" onPress={() => setShowPasswordField(true)} />
+            )}
+            {passwordMsg ? <Text style={styles.successText}>{passwordMsg}</Text> : null}
+          </>
+        )}
+
+        {!isSelf && profile.phone && (
+          <>
+            <Text style={styles.label}>WhatsApp</Text>
+            {showWhatsappField ? (
+              <>
+                <TextField
+                  label="Mensagem"
+                  value={whatsappMessage}
+                  onChangeText={setWhatsappMessage}
+                  placeholder="Ex: Preciso que você confira o elevador social hoje."
+                  multiline
+                />
+                <View style={styles.modalButtonsRow}>
+                  <Button
+                    title="Cancelar"
+                    variant="secondary"
+                    onPress={() => {
+                      setShowWhatsappField(false);
+                      setWhatsappMessage('');
+                    }}
+                    style={styles.flex1}
+                  />
+                  <Button
+                    title="Enviar"
+                    onPress={sendWhatsapp}
+                    loading={sendingWhatsapp}
+                    style={styles.flex1}
+                  />
+                </View>
+              </>
+            ) : (
+              <Button title="Enviar aviso no WhatsApp" variant="secondary" onPress={() => setShowWhatsappField(true)} />
+            )}
+            {whatsappMsg ? <Text style={styles.successText}>{whatsappMsg}</Text> : null}
+          </>
+        )}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -392,7 +558,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
   label: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.xs },
   hintSmall: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: spacing.xs },
-  optionsRow: { flexDirection: 'row', gap: spacing.sm },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   option: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
   optionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   optionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
@@ -408,6 +574,7 @@ const styles = StyleSheet.create({
   confirmText: { fontFamily: fontFamily.medium, color: '#991B1B', fontSize: fontSize.sm },
   confirmButtonsRow: { flexDirection: 'row', gap: spacing.sm },
   error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
+  successText: { fontFamily: fontFamily.medium, color: colors.success, marginTop: spacing.sm, fontSize: fontSize.sm },
   modalButtonsRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
   flex1: { flex: 1 },
 });
