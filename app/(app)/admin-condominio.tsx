@@ -40,7 +40,12 @@ export default function AdminCondominioScreen() {
   const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
 
   const load = useCallback(async () => {
-    if (!condominioId) return;
+    // Segunda barreira além do "return" de renderização mais abaixo: sem
+    // isso, as 8 queries deste load() disparavam pra qualquer usuário
+    // autenticado que navegasse direto pra /admin-condominio, mesmo não
+    // sendo admin da plataforma — a proteção real vem do RLS, mas a tela
+    // não deveria nem tentar buscar o que não vai poder mostrar.
+    if (!condominioId || !isPlatformAdmin) return;
     setLoading(true);
     const [profilesRes, occRes, taskRes, maintRes, docRes, itemsRes, templatesRes, requestsRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('condominio_id', condominioId).order('full_name'),
@@ -110,7 +115,7 @@ export default function AdminCondominioScreen() {
 
     setFeed(merged.slice(0, 30));
     setLoading(false);
-  }, [condominioId]);
+  }, [condominioId, isPlatformAdmin]);
 
   useEffect(() => {
     load();
