@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppModal } from '../../components/AppModal';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DateInput } from '../../components/DateInput';
@@ -19,6 +19,7 @@ import { CATEGORY_COLOR, CATEGORY_ICON } from '../../lib/categories';
 import { FREQUENCY_LABEL } from '../../lib/frequency';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { supabaseErrorMessage } from '../../lib/supabaseError';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useRotinaChecklist } from '../../lib/useRotinaChecklist';
 import type {
@@ -140,13 +141,20 @@ function FuncionarioHome() {
 
   async function toggleTask(task: Task) {
     const done = task.status === 'concluida';
-    await supabase
+    const { error } = await supabase
       .from('tasks')
       .update({
         status: done ? 'pendente' : 'concluida',
         completed_at: done ? null : new Date().toISOString(),
       })
       .eq('id', task.id);
+    if (error) {
+      Alert.alert(
+        'Não foi possível atualizar a tarefa',
+        supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined
+      );
+      return;
+    }
     load();
   }
 

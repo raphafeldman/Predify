@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
@@ -14,6 +14,7 @@ import { useAuth } from '../../lib/auth-context';
 import { CATEGORY_LABEL } from '../../lib/categories';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { supabaseErrorMessage } from '../../lib/supabaseError';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { Occurrence, OccurrenceSeverity, OccurrenceStatus, Profile } from '../../lib/types';
 
@@ -21,15 +22,18 @@ function AssigneePicker({
   value,
   funcionarios,
   onChange,
+  disabled,
 }: {
   value: string | null;
   funcionarios: Profile[];
   onChange: (id: string | null) => void;
+  disabled?: boolean;
 }) {
   return (
     <View style={styles.categoryRow}>
       <Pressable
-        style={[styles.categoryOption, value === null && styles.categoryOptionActive]}
+        disabled={disabled}
+        style={[styles.categoryOption, value === null && styles.categoryOptionActive, disabled && styles.optionDisabled]}
         onPress={() => onChange(null)}
       >
         <Text style={[styles.categoryOptionText, value === null && styles.categoryOptionTextActive]}>
@@ -39,7 +43,8 @@ function AssigneePicker({
       {funcionarios.map((f) => (
         <Pressable
           key={f.id}
-          style={[styles.categoryOption, value === f.id && styles.categoryOptionActive]}
+          disabled={disabled}
+          style={[styles.categoryOption, value === f.id && styles.categoryOptionActive, disabled && styles.optionDisabled]}
           onPress={() => onChange(f.id)}
         >
           <Text style={[styles.categoryOptionText, value === f.id && styles.categoryOptionTextActive]}>
@@ -84,6 +89,7 @@ export default function OrdensScreen() {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [quoteRequestFor, setQuoteRequestFor] = useState<Occurrence | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const isSindico = profile?.role === 'sindico';
 
   const load = useCallback(async () => {
@@ -108,7 +114,13 @@ export default function OrdensScreen() {
   }, [isSindico]);
 
   async function assignTo(id: string, assignedTo: string | null) {
-    await supabase.from('occurrences').update({ assigned_to: assignedTo }).eq('id', id);
+    setBusyId(id);
+    const { error } = await supabase.from('occurrences').update({ assigned_to: assignedTo }).eq('id', id);
+    setBusyId(null);
+    if (error) {
+      Alert.alert('Não foi possível atribuir', supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined);
+      return;
+    }
     load();
   }
 
@@ -124,10 +136,16 @@ export default function OrdensScreen() {
   }, [load]);
 
   async function updateStatus(id: string, status: OccurrenceStatus) {
-    await supabase
+    setBusyId(id);
+    const { error } = await supabase
       .from('occurrences')
       .update({ status, resolved_at: status === 'concluida' ? new Date().toISOString() : null })
       .eq('id', id);
+    setBusyId(null);
+    if (error) {
+      Alert.alert('Não foi possível atualizar', supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined);
+      return;
+    }
     load();
   }
 
@@ -180,6 +198,7 @@ export default function OrdensScreen() {
                     value={item.assigned_to}
                     funcionarios={funcionarios}
                     onChange={(id) => assignTo(item.id, id)}
+                    disabled={busyId === item.id}
                   />
                 </>
               ) : item.assigned_to ? (
@@ -189,17 +208,29 @@ export default function OrdensScreen() {
               ) : null}
               <View style={styles.actionsRow}>
                 {canManage && item.status === 'aberta' && (
-                  <Pressable style={styles.startButton} onPress={() => updateStatus(item.id, 'em_andamento')}>
+                  <Pressable
+                    disabled={busyId === item.id}
+                    style={[styles.startButton, busyId === item.id && styles.optionDisabled]}
+                    onPress={() => updateStatus(item.id, 'em_andamento')}
+                  >
                     <Text style={styles.startButtonText}>Iniciar</Text>
                   </Pressable>
                 )}
                 {canManage && (item.status === 'aberta' || item.status === 'em_andamento') && (
-                  <Pressable style={styles.resolveButton} onPress={() => updateStatus(item.id, 'concluida')}>
+                  <Pressable
+                    disabled={busyId === item.id}
+                    style={[styles.resolveButton, busyId === item.id && styles.optionDisabled]}
+                    onPress={() => updateStatus(item.id, 'concluida')}
+                  >
                     <Text style={styles.resolveButtonText}>Concluir</Text>
                   </Pressable>
                 )}
                 {canManage && item.status === 'concluida' && (
-                  <Pressable style={styles.reopenButton} onPress={() => updateStatus(item.id, 'aberta')}>
+                  <Pressable
+                    disabled={busyId === item.id}
+                    style={[styles.reopenButton, busyId === item.id && styles.optionDisabled]}
+                    onPress={() => updateStatus(item.id, 'aberta')}
+                  >
                     <Text style={styles.reopenButtonText}>Reabrir</Text>
                   </Pressable>
                 )}
@@ -437,6 +468,7 @@ const styles = StyleSheet.create({
   categoryOptionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   categoryOptionText: { fontFamily: fontFamily.semibold, color: colors.textSecondary, fontSize: fontSize.sm },
   categoryOptionTextActive: { color: colors.textOnPrimary },
+  optionDisabled: { opacity: 0.5 },
   severityRow: { flexDirection: 'row', gap: spacing.sm },
   severityOption: {
     borderWidth: 1.5,

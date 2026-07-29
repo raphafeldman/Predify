@@ -43,9 +43,14 @@ export async function registerForPushNotificationsAsync(userId: string) {
       projectId ? { projectId } : undefined
     );
 
-    await supabase
+    const { error } = await supabase
       .from('push_tokens')
       .upsert({ user_id: userId, expo_push_token: tokenResponse.data }, { onConflict: 'expo_push_token' });
+    if (error) {
+      // Registro de push é best-effort e roda em segundo plano no login —
+      // não há tela pra mostrar um erro pro usuário aqui, só log técnico.
+      console.log('Não foi possível salvar o token de notificações push:', error.message);
+    }
   } catch (error) {
     console.log('Não foi possível registrar notificações push:', error);
   }

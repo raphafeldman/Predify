@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { AppModal } from '../../components/AppModal';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
 import { PhotoPicker } from '../../components/PhotoPicker';
@@ -13,6 +13,7 @@ import { useAuth } from '../../lib/auth-context';
 import { CATEGORY_LABEL } from '../../lib/categories';
 import { uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { supabaseErrorMessage } from '../../lib/supabaseError';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import type { ServiceRequest, ServiceRequestStatus } from '../../lib/types';
 
@@ -49,6 +50,7 @@ export default function PrestadoresScreen() {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceRequest | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -73,7 +75,19 @@ export default function PrestadoresScreen() {
   async function share(req: ServiceRequest) {
     await Share.share({ message: buildShareText(req) });
     if (req.status === 'aberta') {
-      await supabase.from('service_requests').update({ status: 'orcamento_solicitado' }).eq('id', req.id);
+      setBusyId(req.id);
+      const { error } = await supabase
+        .from('service_requests')
+        .update({ status: 'orcamento_solicitado' })
+        .eq('id', req.id);
+      setBusyId(null);
+      if (error) {
+        Alert.alert(
+          'Não foi possível atualizar o status',
+          supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined
+        );
+        return;
+      }
       load();
     }
   }
@@ -114,7 +128,11 @@ export default function PrestadoresScreen() {
               </Text>
             ) : null}
             <View style={styles.actionsRow}>
-              <Pressable style={styles.shareButton} onPress={() => share(item)}>
+              <Pressable
+                disabled={busyId === item.id}
+                style={[styles.shareButton, busyId === item.id && styles.optionDisabled]}
+                onPress={() => share(item)}
+              >
                 <Ionicons name="share-social-outline" size={14} color={colors.primary} />
                 <Text style={styles.shareButtonText}>Compartilhar</Text>
               </Pressable>
@@ -377,6 +395,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   shareButtonText: { fontFamily: fontFamily.semibold, color: colors.primary, fontSize: fontSize.xs },
+  optionDisabled: { opacity: 0.5 },
   editButton: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,

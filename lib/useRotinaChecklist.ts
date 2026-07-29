@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { useAuth } from './auth-context';
 import { getPeriodKey } from './frequency';
 import { uploadPhotos } from './storage';
 import { supabase } from './supabase';
+import { supabaseErrorMessage } from './supabaseError';
 import type { ChecklistEntry, ChecklistTemplate } from './types';
 
 // Rotina do usuário logado — itens de checklist atribuídos a ele, ou sem
@@ -56,7 +58,7 @@ export function useRotinaChecklist() {
     const periodKey = getPeriodKey(template.frequency);
     const current = entryFor(template);
     const nextDone = !current?.done;
-    await supabase.from('checklist_entries').upsert(
+    const { error } = await supabase.from('checklist_entries').upsert(
       {
         template_id: template.id,
         entry_date: periodKey,
@@ -66,6 +68,13 @@ export function useRotinaChecklist() {
       },
       { onConflict: 'template_id,entry_date' }
     );
+    if (error) {
+      Alert.alert(
+        'Não foi possível salvar',
+        supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined
+      );
+      return;
+    }
     load();
   }
 
@@ -76,7 +85,7 @@ export function useRotinaChecklist() {
     const uploadedPaths = newPhotoUris.length
       ? await uploadPhotos(newPhotoUris, 'checklist', session.user.id, profile.condominio_id)
       : [];
-    await supabase.from('checklist_entries').upsert(
+    const { error } = await supabase.from('checklist_entries').upsert(
       {
         template_id: template.id,
         entry_date: periodKey,
@@ -85,6 +94,13 @@ export function useRotinaChecklist() {
       },
       { onConflict: 'template_id,entry_date' }
     );
+    if (error) {
+      Alert.alert(
+        'Não foi possível salvar',
+        supabaseErrorMessage(error, 'Tente novamente em instantes.') ?? undefined
+      );
+      return;
+    }
     load();
   }
 
