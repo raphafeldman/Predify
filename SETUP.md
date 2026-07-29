@@ -346,6 +346,33 @@ precisa comprar domínio nenhum pra começar a usar. Quando (e se) quiser um
 domínio próprio no futuro, basta adicionar em **Settings → Domains** no
 painel do projeto na Vercel.
 
+## 12. Migrations versionadas (a partir da Fase 1)
+
+A partir de 2026-07-29, `supabase/schema.sql` ficou **congelado** como
+documentação histórica — pare de colar mudanças novas nele. Toda alteração
+de banco daqui pra frente é um arquivo numerado em `supabase/migrations/`
+(veja o [`README.md`](supabase/migrations/README.md) da pasta pros
+detalhes de cada arquivo e o que ainda está pendente).
+
+Pra aplicar: abra cada arquivo da pasta **na ordem dos nomes** (a numeração
+já garante a ordem certa) e cole no SQL Editor do Supabase, um de cada vez,
+exatamente como já era feito com o `schema.sql` inteiro antes.
+
+## 13. TypeScript, lint e testes (a partir da Fase 1)
+
+O projeto ganhou verificação automatizada nesta fase — rode antes de
+qualquer deploy:
+
+```bash
+npx tsc --noEmit   # TypeScript
+npm run lint       # ESLint (npx expo lint)
+npm test           # Vitest — testes unitários em lib/*.test.ts
+```
+
+Ainda não existe teste automatizado de isolamento entre condomínios (RLS)
+nem de build web — isso depende de um projeto Supabase separado pra teste
+e/ou Docker local, que este ambiente não tinha configurado até agora.
+
 ## O que cada tela nova faz
 
 - **Equipamentos**: cadastro de tudo que precisa de manutenção no prédio
@@ -381,8 +408,9 @@ painel do projeto na Vercel.
 - **Se o SQL Editor reclamar de `pg_cron`** (usado no aviso de manutenção
   vencendo): vá em **Database → Extensions** no painel do Supabase, procure
   "pg_cron" e ative por lá manualmente, depois rode o `schema.sql` de novo.
-- **Depois de atualizações no app**: sempre que o `supabase/schema.sql` mudar,
-  colar o arquivo inteiro de novo no SQL Editor e rodar — é seguro rodar
-  quantas vezes quiser, ele só adiciona o que ainda não existe.
+- **Depois de atualizações no app**: a partir da Fase 1 (2026-07-29),
+  `schema.sql` não recebe mais mudanças — veja a seção 12 e
+  `supabase/migrations/README.md` para o processo novo (arquivos
+  numerados, aplicados na ordem).
 - **Notificação push no Android**: dentro do Expo Go, notificações push só funcionam no iOS. No Android, elas só funcionam depois de gerar uma versão "development build" do app (um passo posterior, quando quiser ir além dos testes iniciais). No iOS, funciona normalmente pelo Expo Go.
 - **Node.js**: este computador não tinha Node.js instalado e a instalação padrão foi bloqueada, então foi usada uma versão "portable" (sem instalador) salva em `%LOCALAPPDATA%\nodejs-portable`. Se abrir um novo terminal e os comandos `node`/`npm` não forem reconhecidos, feche e reabra o terminal (o PATH já foi salvo permanentemente para o seu usuário).
