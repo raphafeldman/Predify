@@ -73,6 +73,9 @@ export interface MaintenanceItem {
   assigned_to: string | null;
   created_by: string | null;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export type MaintenanceRecordType = 'preventiva' | 'corretiva';
@@ -92,6 +95,9 @@ export interface MaintenanceRecord {
   om_file_url: string | null;
   om_file_name: string | null;
   om_mime_type: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export interface Fornecedor {
@@ -109,6 +115,9 @@ export interface Fornecedor {
   contract_file_mime_type: string | null;
   created_by: string | null;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export interface ChecklistTemplate {
@@ -120,6 +129,9 @@ export interface ChecklistTemplate {
   active: boolean;
   created_by: string | null;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export interface ChecklistEntry {
@@ -147,6 +159,9 @@ export interface Task {
   scheduled_for: string | null;
   created_at: string;
   completed_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export type OccurrenceSeverity = 'baixa' | 'media' | 'alta';
@@ -168,6 +183,9 @@ export interface Occurrence {
   assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export interface DocumentItem {
@@ -180,6 +198,9 @@ export interface DocumentItem {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }
 
 export interface Comment {
@@ -231,4 +252,29 @@ export interface ServiceRequest {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type AuditEventAction =
+  | 'created'
+  | 'status_changed'
+  | 'assignee_changed'
+  | 'due_date_changed'
+  | 'cost_changed'
+  | 'deleted'
+  | 'restored';
+
+export interface AuditEvent {
+  id: string;
+  condominio_id: string;
+  record_type: RecordType;
+  record_id: string;
+  action: AuditEventAction;
+  actor_id: string | null;
+  field_name: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
 }
