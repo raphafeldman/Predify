@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { classificarArquivo } from '../lib/imageTypes';
 import { colors, fontFamily, fontSize, radius, spacing } from '../lib/theme';
 
 interface Props {
@@ -8,25 +9,91 @@ interface Props {
   onChange: (uris: string[]) => void;
 }
 
+/** Seleção de imagens no navegador, sem passar pelo expo-image-picker —
+ * que derruba a tela quando o navegador não informa o tipo do arquivo
+ * (ver lib/imageTypes.ts). */
+function escolherImagensNaWeb(): Promise<{ uris: string[]; recusados: string[] }> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+
+    input.addEventListener('change', () => {
+      const arquivos = Array.from(input.files ?? []);
+      const uris: string[] = [];
+      const recusados: string[] = [];
+
+      for (const arquivo of arquivos) {
+        const resultado = classificarArquivo(arquivo.name, arquivo.type);
+        if (resultado.aceito) {
+          uris.push(URL.createObjectURL(arquivo));
+        } else if (resultado.motivo === 'formato_nao_exibivel') {
+          recusados.push(`${arquivo.name} (${resultado.formato})`);
+        } else {
+          recusados.push(arquivo.name);
+        }
+      }
+
+      document.body.removeChild(input);
+      resolve({ uris, recusados });
+    });
+
+    input.addEventListener('cancel', () => {
+      document.body.removeChild(input);
+      resolve({ uris: [], recusados: [] });
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
 export function PhotoPicker({ uris, onChange }: Props) {
   async function takePhoto() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.6 });
-    if (!result.canceled && result.assets[0]) {
-      onChange([...uris, result.assets[0].uri]);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) return;
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+      if (!result.canceled && result.assets[0]) {
+        onChange([...uris, result.assets[0].uri]);
+      }
+    } catch {
+      Alert.alert('Não foi possível usar a câmera', 'Tente novamente ou escolha uma foto da galeria.');
     }
   }
 
   async function pickFromLibrary() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.6,
-      allowsMultipleSelection: true,
-    });
-    if (!result.canceled) {
-      onChange([...uris, ...result.assets.map((a) => a.uri)]);
+    try {
+      if (Platform.OS === 'web') {
+        const { uris: novas, recusados } = await escolherImagensNaWeb();
+        if (novas.length > 0) onChange([...uris, ...novas]);
+        if (recusados.length > 0) {
+          Alert.alert(
+            'Formato não aceito no navegador',
+            `Não foi possível anexar: ${recusados.join(', ')}.\n\n` +
+              'Fotos de iPhone (HEIC) não abrem no navegador. Envie pelo celular, ' +
+              'ou converta para JPG/PNG antes.'
+          );
+        }
+        return;
+      }
+
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) return;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        quality: 0.6,
+        allowsMultipleSelection: true,
+      });
+      if (!result.canceled) {
+        onChange([...uris, ...result.assets.map((a) => a.uri)]);
+      }
+    } catch {
+      Alert.alert(
+        'Não foi possível anexar a foto',
+        'O arquivo escolhido não pôde ser lido. Tente outra imagem (JPG ou PNG).'
+      );
     }
   }
 

@@ -30,10 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files — ignora qualquer variante (.env.test, .env.producao,
+# .env.local, backups...), liberando só os arquivos de exemplo. A regra
+# antiga listava as variantes uma a uma e deixava passar nomes novos.
 .env
-.env.test
-.env*.local
+.env.*
 !.env.example
 !.env.test.example
 
