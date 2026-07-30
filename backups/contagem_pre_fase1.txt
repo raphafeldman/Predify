@@ -1,0 +1,19 @@
+CONTAGEM DE LINHAS - PRODUCAO ANTES DAS MIGRATIONS
+---------------------------------------------
+  checklist_entries            6
+  checklist_templates          6
+  comments                     0
+  condominios                  2
+  documents                    1
+  fornecedores                 1
+  maintenance_items            6
+  maintenance_records          2
+  notifications                0
+  occurrences                  3
+  profiles                     3
+  push_tokens                  0
+  service_requests             6
+  tasks                        1
+  whatsapp_messages            0
+---------------------------------------------
+  TOTAL                       37
