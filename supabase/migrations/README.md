@@ -48,11 +48,30 @@ ordem dos nomes** (a numeração já garante a ordem certa):
   esquecimento. `documents` ganhou uma policy de update nova (necessária
   pro soft delete funcionar), mas isso foi o único caso onde a ausência
   claramente impedia uma funcionalidade pedida nesta fase.
-- **Testes de isolamento multi-tenant contra um banco real** não foram
-  executados — este ambiente não tem um projeto Supabase de teste
-  separado nem Docker confirmado para rodar `supabase start` localmente.
-  As migrations acima foram revisadas manualmente (sintaxe, predicados,
-  parênteses) mas não têm confirmação de execução real contra Postgres.
+## Validação em homologação (2026-07-29)
+
+As 4 migrations acima foram aplicadas num projeto Supabase de
+homologação (separado da produção) e validadas por testes automatizados
+que rodam contra ele — ver `supabase/tests/rls-isolation.test.ts` e
+`.env.test.example`. Os testes provam, com dois condomínios reais
+criados pelo fluxo self-service do app:
+
+- um síndico não lê, não altera e não exclui (nem logicamente) ordens de
+  outro condomínio;
+- o mesmo vale para documentos, tarefas e fornecedores;
+- `audit_events` não vaza entre condomínios, e o trigger de auditoria
+  realmente grava o evento de criação (o síndico do próprio condomínio
+  enxerga o evento).
+
+Isso também confirma na prática que as colunas de soft delete e a tabela
+`audit_events` funcionam num Postgres real — não só na revisão manual do
+SQL. **A produção continua sem essas migrations aplicadas.**
+
+Para rodar os testes você precisa, no projeto de homologação:
+`.env.test` preenchido (copie de `.env.test.example`), provider de e-mail
+habilitado para signup e **"Confirm email" desligado** em Authentication
+→ Sign In / Providers → Email. Sem `.env.test`, os testes são pulados
+automaticamente e `npm test` continua verde.
 
 ## Voltando atrás (rollback)
 
