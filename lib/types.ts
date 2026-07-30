@@ -6,7 +6,13 @@ export type RecordType =
   | 'task'
   | 'checklist_entry'
   | 'document'
-  | 'service_request';
+  | 'service_request'
+  // Fase 2 — convivem com os antigos durante a migração.
+  | 'incident'
+  | 'work_order'
+  | 'asset'
+  | 'maintenance_plan'
+  | 'location';
 
 export interface Profile {
   id: string;
@@ -276,5 +282,247 @@ export interface AuditEvent {
   field_name: string | null;
   old_value: string | null;
   new_value: string | null;
+  created_at: string;
+}
+
+// ============================================================
+// Fase 2 — Domínio de Manutenção
+//
+// Estas entidades convivem com as antigas (MaintenanceItem, Occurrence,
+// MaintenanceRecord) durante toda a migração. As tabelas antigas seguem
+// sendo a fonte da verdade até a Fase 2D cortar cada tela.
+// ============================================================
+
+export type LocationKind = 'bloco' | 'pavimento' | 'area' | 'ambiente';
+
+export interface Location {
+  id: string;
+  condominio_id: string;
+  parent_id: string | null;
+  name: string;
+  kind: LocationKind;
+  code: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type AssetCriticality = 'baixa' | 'media' | 'alta' | 'critica';
+export type AssetOperationalStatus = 'operando' | 'parado' | 'manutencao' | 'desativado';
+
+export interface Asset {
+  id: string;
+  condominio_id: string;
+  asset_code: string | null;
+  name: string;
+  description: string | null;
+  category: string;
+  location_id: string | null;
+  /** Texto livre herdado de MaintenanceItem.location, preservado na migração. */
+  location_text: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
+  installation_date: string | null;
+  warranty_until: string | null;
+  criticality: AssetCriticality;
+  operational_status: AssetOperationalStatus;
+  responsible_user_id: string | null;
+  supplier_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type MaintenancePlanType = 'preventiva' | 'preditiva' | 'inspecao';
+
+/** Além das 6 frequências herdadas, inclui gatilhos não-temporais que
+ * ainda não têm interface — disponíveis no banco para fases futuras. */
+export type MaintenanceFrequencyType =
+  | 'diaria'
+  | 'semanal'
+  | 'quinzenal'
+  | 'mensal'
+  | 'bimestral'
+  | 'trimestral'
+  | 'semestral'
+  | 'anual'
+  | 'data_especifica'
+  | 'medidor'
+  | 'horas_funcionamento';
+
+export interface MaintenancePlan {
+  id: string;
+  condominio_id: string;
+  asset_id: string | null;
+  location_id: string | null;
+  name: string;
+  description: string | null;
+  maintenance_type: MaintenancePlanType;
+  frequency_type: MaintenanceFrequencyType;
+  frequency_interval: number;
+  next_due_at: string | null;
+  lead_time_days: number;
+  responsible_user_id: string | null;
+  supplier_id: string | null;
+  estimated_duration_minutes: number | null;
+  estimated_cost: number | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type StepResponseType =
+  | 'confirmacao'
+  | 'sim_nao'
+  | 'texto'
+  | 'numero'
+  | 'medidor'
+  | 'selecao'
+  | 'foto'
+  | 'arquivo'
+  | 'assinatura';
+
+export interface MaintenancePlanStep {
+  id: string;
+  plan_id: string;
+  order_index: number;
+  title: string;
+  instruction: string | null;
+  response_type: StepResponseType;
+  options: string[];
+  required: boolean;
+  min_value: number | null;
+  max_value: number | null;
+  requires_evidence: boolean;
+  creates_nonconformity: boolean;
+  created_at: string;
+}
+
+export type IncidentStatus =
+  | 'nova'
+  | 'em_triagem'
+  | 'aguardando_info'
+  | 'encaminhada'
+  | 'resolvida_sem_os'
+  | 'convertida_em_os'
+  | 'encerrada'
+  | 'cancelada'
+  | 'reaberta';
+
+export interface Incident {
+  id: string;
+  condominio_id: string;
+  number: number | null;
+  title: string;
+  description: string;
+  category: string;
+  severity: OccurrenceSeverity;
+  status: IncidentStatus;
+  asset_id: string | null;
+  location_id: string | null;
+  photo_urls: string[];
+  reported_by: string | null;
+  triaged_by: string | null;
+  triaged_at: string | null;
+  resolution_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type WorkOrderOrigin = 'incidente' | 'preventiva' | 'inspecao' | 'solicitacao_direta';
+export type WorkOrderPriority = 'baixa' | 'media' | 'alta' | 'urgente';
+
+/** O banco aceita 16 estados; a interface expõe os 8 principais mais
+ * cancelada/reaberta. Os demais ficam disponíveis para ativação futura
+ * sem nova migration. */
+export type WorkOrderStatus =
+  | 'rascunho'
+  | 'aberta'
+  | 'em_triagem'
+  | 'aguardando_aprovacao'
+  | 'aguardando_orcamento'
+  | 'aprovada'
+  | 'programada'
+  | 'em_execucao'
+  | 'pausada'
+  | 'aguardando_material'
+  | 'aguardando_fornecedor'
+  | 'concluida'
+  | 'aguardando_validacao'
+  | 'encerrada'
+  | 'cancelada'
+  | 'reaberta';
+
+export interface WorkOrder {
+  id: string;
+  condominio_id: string;
+  number: number | null;
+  origin_type: WorkOrderOrigin;
+  incident_id: string | null;
+  maintenance_plan_id: string | null;
+  asset_id: string | null;
+  location_id: string | null;
+  title: string;
+  description: string;
+  category: string;
+  priority: WorkOrderPriority;
+  criticality: AssetCriticality;
+  status: WorkOrderStatus;
+  requested_by: string | null;
+  assigned_user_id: string | null;
+  supplier_id: string | null;
+  due_at: string | null;
+  sla_minutes: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  validated_at: string | null;
+  validated_by: string | null;
+  estimated_cost: number | null;
+  actual_cost: number | null;
+  cancellation_reason: string | null;
+  reopening_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type EvidenceKind =
+  | 'foto_antes'
+  | 'foto_durante'
+  | 'foto_depois'
+  | 'om_fornecedor'
+  | 'nota_fiscal'
+  | 'relatorio'
+  | 'laudo'
+  | 'assinatura'
+  | 'outro';
+
+export interface WorkOrderEvidence {
+  id: string;
+  work_order_id: string;
+  kind: EvidenceKind;
+  file_url: string;
+  file_name: string | null;
+  mime_type: string | null;
+  notes: string | null;
+  uploaded_by: string | null;
   created_at: string;
 }

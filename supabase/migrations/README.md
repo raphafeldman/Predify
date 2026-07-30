@@ -73,6 +73,37 @@ habilitado para signup e **"Confirm email" desligado** em Authentication
 → Sign In / Providers → Email. Sem `.env.test`, os testes são pulados
 automaticamente e `npm test` continua verde.
 
+## Aplicando com o CLI (a partir da Fase 2)
+
+A Fase 1 foi aplicada em produção com `npx supabase db push --linked`, que
+funciona e dispensa colar SQL no editor. Dois cuidados aprendidos na prática:
+
+**1. Confira sempre em qual projeto o CLI está linkado antes de dar push.**
+
+```bash
+npx supabase projects list   # procure "linked": true
+npx supabase link --project-ref <ref>
+```
+
+Trocar de projeto para testar em homologação e **esquecer de voltar** faria o
+próximo push cair no lugar errado.
+
+**2. Se um projeto recebeu migrations manualmente (coladas no SQL Editor), o
+CLI não sabe disso** e vai tentar reaplicar tudo desde o começo. Marque-as como
+já aplicadas antes do primeiro push:
+
+```bash
+npx supabase migration repair --status applied 20260729120000
+```
+
+Foi exatamente o que aconteceu em homologação na Fase 2A: o push tentou
+reaplicar o baseline e falhou em
+`alter table public.profiles alter column condominio_id set not null`, porque
+lá existem contas de teste sem condomínio (criadas pelos próprios testes de
+escalonamento de privilégio). **O baseline não é seguro de reaplicar num banco
+que tenha perfis sem `condominio_id`** — em produção passou porque todos os
+perfis têm condomínio.
+
 ## Voltando atrás (rollback)
 
 Nenhuma migration desta fase remove tabela, coluna ou dado — só adiciona
