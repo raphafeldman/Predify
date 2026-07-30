@@ -376,6 +376,9 @@ export interface MaintenancePlan {
   estimated_duration_minutes: number | null;
   estimated_cost: number | null;
   active: boolean;
+  // Preenchido só nos planos nascidos da migração da Fase 2B: aponta
+  // para o maintenance_items de origem. Nulo em plano criado pelo app.
+  legacy_maintenance_item_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -497,6 +500,9 @@ export interface WorkOrder {
   actual_cost: number | null;
   cancellation_reason: string | null;
   reopening_reason: string | null;
+  // De qual tabela antiga esta ordem foi migrada na Fase 2B; nulo
+  // quando foi criada direto no modelo novo.
+  legacy_table: 'occurrences' | 'maintenance_records' | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

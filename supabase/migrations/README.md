@@ -104,6 +104,64 @@ escalonamento de privilégio). **O baseline não é seguro de reaplicar num banc
 que tenha perfis sem `condominio_id`** — em produção passou porque todos os
 perfis têm condomínio.
 
+## Fase 2B — migração dos dados (2026-07-30)
+
+`20260730160000_backfill_dominio_manutencao.sql` cria a maquinaria e
+`20260730160100_executar_backfill.sql` a executa. A separação é
+proposital: mover dados é re-executável, criar função não precisa ser, e
+se a cópia falhar o erro não leva junto a definição das funções.
+
+O que a cópia faz, sem apagar nem alterar nada nas tabelas antigas:
+
+| Origem | Destino | Chave |
+| --- | --- | --- |
+| `maintenance_items` | `assets` | mesmo `id` |
+| `maintenance_items` | `maintenance_plans` | `legacy_maintenance_item_id` |
+| `occurrences` | `incidents` | mesmo `id` e mesmo número |
+| `occurrences` | `work_orders` | mesmo `id` e **mesmo `os_number`** |
+| `maintenance_records` | `work_orders` | mesmo `id`, número novo |
+| `photo_urls` / `om_file_url` | `work_order_evidence` | `(work_order_id, file_url)` |
+
+Preservar o `id` é o que faz comentários e notificações antigos
+continuarem resolvendo. Preservar o `os_number` é inegociável: é por ele
+que a equipe se refere à ordem no dia a dia.
+
+**Reexecutar é seguro e esperado.** Até a Fase 2D cortar as telas, as
+gravações continuam indo para as tabelas antigas e o espelho novo
+envelhece. Antes de cada corte, rode de novo:
+
+```sql
+select * from public.fase2_backfill();           -- todos os condomínios
+select * from public.fase2_relatorio_migracao(); -- confere, linha a linha
+```
+
+Ambas são de operação (postgres / SQL Editor), sem `grant` para
+`authenticated`: contam linhas de **todos** os condomínios, e expor isso
+a um usuário logado vazaria o volume de dados alheios. O síndico tem a
+versão segura, restrita ao próprio condomínio:
+`select * from public.fase2_resincronizar();`
+
+### Duas armadilhas encontradas aqui (valem para as próximas migrations)
+
+**1. `ON CONFLICT` não infere índice único parcial.** A primeira versão
+usava `create unique index ... where legacy_maintenance_item_id is not
+null`, e o `on conflict (legacy_maintenance_item_id)` falhava — o
+Postgres só aceita um índice parcial como árbitro se o predicado for
+repetido na própria cláusula. Como índice único comum já aceita vários
+`NULL`, a solução foi tirar o `where`.
+
+**2. `stamp_condominio_id()` carimba INCONDICIONALMENTE**
+(`new.condominio_id := current_condominio_id()`). Numa migration não
+existe `auth.uid()`, então o carimbo viraria `NULL` e o insert quebraria
+no `not null`. O backfill desliga esse gatilho durante a cópia e religa
+ao final — desligamento transacional, que o rollback desfaz sozinho.
+
+Deliberadamente **não** afrouxei a função para "só carimba se vier
+nulo": isso deixaria um cliente autenticado enviar um `condominio_id`
+alheio em `occurrences`/`tasks`/`documents`, cujas policies de insert só
+conferem `created_by`. Quando um síndico chama `fase2_resincronizar()`,
+o gatilho fica ligado — e carimba justamente o condomínio certo.
+
 ## Voltando atrás (rollback)
 
 Nenhuma migration desta fase remove tabela, coluna ou dado — só adiciona
