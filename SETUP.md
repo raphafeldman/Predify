@@ -314,9 +314,15 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=sua-chave-anon-publica
 ```
 
    Sem isso o site builda mas não consegue falar com o Supabase.
-4. `npx vercel --prod` pra publicar de verdade. A URL final aparece no
-   terminal, algo como `https://predify.vercel.app` (ou com um sufixo
-   aleatório, se esse nome já estiver em uso por outra conta).
+4. `npx vercel --prod` pra publicar de verdade. A URL de produção é
+   **https://gestaopredify.vercel.app**.
+
+   Atenção: `predify.vercel.app` (sem o "gestao") **não é este app** —
+   é um site de terceiros, sem relação nenhuma com o Predify. As URLs
+   com sufixo aleatório que aparecem em `npx vercel ls` também não
+   servem para uso diário: têm proteção de deploy e pedem login da
+   Vercel. Para ver a lista completa de endereços que apontam para a
+   produção atual: `npx vercel alias ls`.
 
 ### 11.3 Deploy automático a cada atualização
 

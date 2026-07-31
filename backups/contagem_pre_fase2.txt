@@ -1,0 +1,28 @@
+Estado de PRODUCAO (qkatokyhufovtwwhowzo) imediatamente antes das
+migrations da Fase 2 (2A estrutura + 2B backfill) — 2026-07-31.
+
+Tabelas legadas (fonte da verdade, nao devem mudar):
+  condominios ............ 2
+  profiles ............... 3
+  maintenance_items ...... 10
+  occurrences ............ 2
+  maintenance_records .... 2
+  fornecedores ........... 0
+  audit_events ........... 4
+
+Anexos no legado:
+  fotos em occurrences ......... 2
+  fotos em maintenance_records . 1
+  OM de fornecedor ............. 0
+
+Pre-verificacoes:
+  migrations registradas ....... 4 (Fase 1: 20260729120000/120100/120200/120300)
+  perfis sem condominio_id ..... 0
+  tabelas da Fase 2 existentes . 0
+
+Esperado apos o backfill:
+  assets ............... 10  (1 por maintenance_item)
+  maintenance_plans .... 10  (1 por maintenance_item)
+  incidents ............  2  (1 por occurrence)
+  work_orders ..........  4  (2 de occurrences + 2 de maintenance_records)
+  work_order_evidence ..  3  (2 fotos + 1 foto + 0 OM)

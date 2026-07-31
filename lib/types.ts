@@ -503,6 +503,9 @@ export interface WorkOrder {
   // De qual tabela antiga esta ordem foi migrada na Fase 2B; nulo
   // quando foi criada direto no modelo novo.
   legacy_table: 'occurrences' | 'maintenance_records' | null;
+  // Para qual vencimento do plano esta ordem foi gerada. É o que impede
+  // o gerador de criar duas ordens do mesmo ciclo.
+  plan_cycle_date: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -531,4 +534,28 @@ export interface WorkOrderEvidence {
   notes: string | null;
   uploaded_by: string | null;
   created_at: string;
+}
+
+// Resposta de uma etapa do checklist numa ordem concreta.
+// maintenance_plan_steps é o modelo; isto é o que foi de fato
+// respondido. Guarda cópia de título e tipo porque o plano pode ser
+// editado depois — um laudo não muda retroativamente porque alguém
+// renomeou a etapa.
+export interface WorkOrderStepResult {
+  id: string;
+  work_order_id: string;
+  plan_step_id: string | null;
+  order_index: number;
+  title: string;
+  response_type: StepResponseType;
+  value_text: string | null;
+  value_number: number | null;
+  value_boolean: boolean | null;
+  file_urls: string[];
+  // Falso quando a resposta viola a faixa configurada na etapa; é o que
+  // dispara a não conformidade.
+  conforme: boolean;
+  notes: string | null;
+  answered_by: string | null;
+  answered_at: string;
 }

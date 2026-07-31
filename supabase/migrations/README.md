@@ -162,6 +162,68 @@ alheio em `occurrences`/`tasks`/`documents`, cujas policies de insert só
 conferem `created_by`. Quando um síndico chama `fase2_resincronizar()`,
 o gatilho fica ligado — e carimba justamente o condomínio certo.
 
+## Fase 2C — lógica de domínio (2026-07-31)
+
+`20260731100000_dominio_manutencao_logica.sql`. O modelo deixa de ser só
+tabelas e passa a garantir comportamento, independentemente de qual tela
+chame:
+
+- **`proximo_vencimento(freq, intervalo, base)`** — função pura. Devolve
+  `NULL` para gatilho não temporal (data específica, medidor, horas de
+  funcionamento): não se calcula recorrência de calendário para eles, e
+  inventar uma data seria pior que não ter.
+- **`gerar_os_preventivas()`** — plano vencido (dentro de
+  `lead_time_days`) vira ordem. `work_orders.plan_cycle_date` guarda
+  para qual vencimento a ordem nasceu, e é o que torna a geração
+  idempotente. Versão do síndico: `gerar_minhas_os_preventivas()`.
+- **Máquina de estados** — `transicoes_work_order(status)` define de
+  onde se pode ir para onde; de um estado final só se sai reabrindo. Só
+  vale para UPDATE: a carga da 2B entrou por INSERT, e migrar histórico
+  não é transição de estado.
+- **Avanço do plano ao concluir** — a cadência é ancorada no vencimento
+  PROGRAMADO, não na data em que se concluiu. Ancorar na conclusão faz a
+  mensal andar para frente um pouco a cada mês até desalinhar.
+- **`work_order_step_results` + não conformidade** — resposta fora da
+  faixa (ou "não" num sim/não) marca a etapa como não conforme; se a
+  etapa estiver configurada para isso, abre uma ocorrência ligada ao
+  mesmo ativo. É o que transforma "passei lá e olhei" em "medi 1,2 bar
+  onde o mínimo é 2".
+
+**A geração NÃO é agendada por esta migration.** Ligar um `pg_cron` aqui
+faria trabalho novo aparecer sozinho em produção antes de existir tela
+para vê-lo. O agendamento entra na 2D, junto com a interface.
+
+### O backfill precisa se afastar dos gatilhos de domínio
+
+Duas colisões reais, encontradas antes de aplicar:
+
+1. Se uma ocorrência já migrada for **reaberta na tela antiga**, a
+   re-sincronização precisaria mover a ordem de `encerrada` para
+   `em_execucao` — proibido pela máquina de estados, e com razão:
+   ninguém executou essa transição, o backfill só espelha.
+2. Concluir uma preventiva avança o plano; mas na re-sincronização o
+   vencimento **já vem calculado** do modelo antigo (o auto-avanço de
+   `maintenance_items` fez a conta e o backfill copiou). Avançar de novo
+   pularia um ciclo inteiro.
+
+Por isso `fase2_backfill` se identifica e os dois gatilhos se afastam
+enquanto ela roda (`sincronizando_legado()`).
+
+**Por que o sinal viaja em `application_name`:** a escolha natural seria
+um parâmetro personalizado, mas o papel `postgres` do Supabase não tem
+permissão para isso — `ALTER FUNCTION ... SET predify.sincronizando`
+falha com `42501: permission denied to set parameter`. `application_name`
+é USERSET e funciona; com `ALTER FUNCTION ... SET`, o valor vale só
+durante a chamada e é restaurado na saída.
+
+### Rodando os testes
+
+Cada suíte cria condomínios de verdade pelo fluxo de signup, e o
+Supabase limita cadastros **por hora, no projeto inteiro**. Rodar a
+suíte completa várias vezes seguidas esgota a cota e faz suítes
+falharem em `beforeAll` por um motivo que nada tem a ver com o código.
+Nesse caso, rode um arquivo por vez ou espere a janela virar.
+
 ## Voltando atrás (rollback)
 
 Nenhuma migration desta fase remove tabela, coluna ou dado — só adiciona
