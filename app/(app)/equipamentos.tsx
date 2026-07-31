@@ -14,6 +14,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { getMaintenanceUrgency, URGENCY_COLOR, URGENCY_LABEL } from '../../lib/frequency';
+import { registrarManutencao } from '../../lib/registrarManutencao';
 import { uploadFile, uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { supabaseErrorMessage } from '../../lib/supabaseError';
@@ -817,60 +818,17 @@ function LogMaintenanceModal({
 
       const plano = planos.find((p) => p.id === planoId);
 
-      // Entra como "em execução" e só depois é concluída, em vez de
-      // nascer concluída: a máquina de estados do banco só age em
-      // UPDATE, e é a conclusão que empurra o vencimento do plano.
-      const { data: os, error: insertError } = await supabase
-        .from('work_orders')
-        .insert({
-          origin_type: planoId ? 'preventiva' : 'solicitacao_direta',
-          maintenance_plan_id: planoId,
-          asset_id: asset.id,
-          title: plano ? plano.name : `Manutenção — ${asset.name}`,
-          description: description.trim(),
-          category: asset.category,
-          status: 'em_execucao',
-          started_at: new Date().toISOString(),
-          requested_by: session.user.id,
-          assigned_user_id: session.user.id,
-          supplier_id: fornecedorId,
-        })
-        .select()
-        .single();
-      if (insertError) throw insertError;
-
-      const evidencias = [
-        ...photoPaths.map((url) => ({
-          work_order_id: os!.id,
-          kind: 'foto_depois',
-          file_url: url,
-          uploaded_by: session.user.id,
-        })),
-        ...(omPath
-          ? [
-              {
-                work_order_id: os!.id,
-                kind: 'om_fornecedor',
-                file_url: omPath,
-                file_name: omFile?.name ?? null,
-                mime_type: omFile?.mimeType ?? null,
-                uploaded_by: session.user.id,
-              },
-            ]
-          : []),
-      ];
-      if (evidencias.length) {
-        const { error: evError } = await supabase.from('work_order_evidence').insert(evidencias);
-        if (evError) throw evError;
-      }
-
-      // Por último, para que o registro esteja completo quando o
-      // vencimento do plano avançar.
-      const { error: concluirError } = await supabase
-        .from('work_orders')
-        .update({ status: 'concluida' })
-        .eq('id', os!.id);
-      if (concluirError) throw concluirError;
+      await registrarManutencao({
+        assetId: asset.id,
+        planId: planoId,
+        title: plano ? plano.name : `Manutenção — ${asset.name}`,
+        description: description.trim(),
+        category: asset.category,
+        userId: session.user.id,
+        fornecedorId,
+        photoPaths,
+        om: omPath ? { path: omPath, name: omFile?.name ?? null, mimeType: omFile?.mimeType ?? null } : null,
+      });
 
       onSaved();
     } catch (err) {
