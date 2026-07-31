@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppModal } from '../../components/AppModal';
 import { AttachmentPreview } from '../../components/AttachmentPreview';
 import { DateInput } from '../../components/DateInput';
@@ -13,53 +13,149 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
-import { FREQUENCY_LABEL, getMaintenanceUrgency, URGENCY_COLOR, URGENCY_LABEL } from '../../lib/frequency';
+import { getMaintenanceUrgency, URGENCY_COLOR, URGENCY_LABEL } from '../../lib/frequency';
 import { uploadFile, uploadPhotos } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
+import { supabaseErrorMessage } from '../../lib/supabaseError';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useIsWideScreen } from '../../lib/useIsWideScreen';
-import type { Fornecedor, MaintenanceFrequency, MaintenanceItem, MaintenanceRecord, Profile } from '../../lib/types';
+import {
+  PLAN_FREQUENCIES_CALENDARIO,
+  PLAN_FREQUENCY_LABEL,
+  WO_STATUS_COLOR,
+  WO_STATUS_LABEL,
+} from '../../lib/workOrderStatus';
+import type {
+  Asset,
+  Fornecedor,
+  MaintenanceFrequencyType,
+  MaintenancePlan,
+  Profile,
+  WorkOrder,
+  WorkOrderEvidence,
+} from '../../lib/types';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR');
 }
 
+// O ativo em si não vence — quem vence é o plano. A urgência do
+// equipamento na lista é a do plano mais próximo de vencer.
+function proximoVencimento(planos: MaintenancePlan[]): string | null {
+  const datas = planos
+    .filter((p) => p.active && !p.deleted_at && p.next_due_at)
+    .map((p) => p.next_due_at as string)
+    .sort();
+  return datas[0] ?? null;
+}
+
 export default function EquipamentosScreen() {
   const { profile } = useAuth();
   const isWeb = useIsWideScreen();
-  const [items, setItems] = useState<MaintenanceItem[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [planos, setPlanos] = useState<MaintenancePlan[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
-  const [selected, setSelected] = useState<MaintenanceItem | null>(null);
+  const [selected, setSelected] = useState<Asset | null>(null);
+  const [cortado, setCortado] = useState<boolean | null>(null);
+  const [cortando, setCortando] = useState(false);
+  const isSindico = profile?.role === 'sindico';
 
   const load = useCallback(async () => {
-    const [itemsRes, profilesRes, fornecedoresRes] = await Promise.all([
-      supabase.from('maintenance_items').select('*').order('next_due_date'),
+    const [assetsRes, planosRes, profilesRes, fornecedoresRes] = await Promise.all([
+      supabase.from('assets').select('*').order('name'),
+      supabase.from('maintenance_plans').select('*').order('next_due_at'),
       supabase.from('profiles').select('*').eq('role', 'funcionario').eq('active', true),
       supabase.from('fornecedores').select('*').eq('active', true).order('name'),
     ]);
-    if (itemsRes.data) setItems(itemsRes.data as MaintenanceItem[]);
+    if (assetsRes.data) setAssets(assetsRes.data as Asset[]);
+    if (planosRes.data) setPlanos(planosRes.data as MaintenancePlan[]);
     if (profilesRes.data) setFuncionarios(profilesRes.data as Profile[]);
     if (fornecedoresRes.data) setFornecedores(fornecedoresRes.data as Fornecedor[]);
     setLoading(false);
   }, []);
 
+  // Mesma trava da tela de Ordens: antes do corte, o espelho reescreve
+  // as tabelas novas a cada sincronização e o que fosse criado aqui
+  // desapareceria sem aviso.
+  const verificarCorte = useCallback(async () => {
+    if (!profile?.condominio_id) return;
+    const { data } = await supabase
+      .from('condominios')
+      .select('dominio_cortado_em')
+      .eq('id', profile.condominio_id)
+      .maybeSingle();
+    setCortado(Boolean(data?.dominio_cortado_em));
+  }, [profile?.condominio_id]);
+
   useEffect(() => {
+    verificarCorte();
     load();
-  }, [load]);
+  }, [verificarCorte, load]);
+
+  async function cortar() {
+    setCortando(true);
+    const { error } = await supabase.rpc('cortar_dominio_manutencao');
+    setCortando(false);
+    if (error) {
+      Alert.alert('Não foi possível migrar', supabaseErrorMessage(error, 'Tente novamente.') ?? undefined);
+      return;
+    }
+    await verificarCorte();
+    load();
+  }
 
   function funcionarioName(id: string | null) {
     if (!id) return '—';
     return funcionarios.find((f) => f.id === id)?.full_name ?? '—';
   }
 
+  const planosDo = (assetId: string) => planos.filter((p) => p.asset_id === assetId && !p.deleted_at);
+
+  if (cortado === null) {
+    return (
+      <View style={styles.carregando}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (cortado === false) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.avisoCorte}>
+          <Ionicons name="swap-horizontal-outline" size={28} color={colors.primary} />
+          <Text style={styles.modalTitle}>Migrar para o novo modelo de manutenção</Text>
+          <Text style={styles.detailLine}>
+            Hoje o equipamento e a regra de manutenção são a mesma coisa, e por isso só cabe uma
+            frequência por equipamento. A migração separa os dois: o mesmo gerador passa a poder ter
+            troca de filtro mensal e revisão anual ao mesmo tempo.
+          </Text>
+          <Text style={styles.detailLine}>
+            Nada é apagado. Cada equipamento atual vira um ativo com um plano equivalente.
+          </Text>
+          {isSindico ? (
+            <Button
+              title={cortando ? 'Migrando…' : 'Migrar agora'}
+              onPress={cortar}
+              loading={cortando}
+              style={{ marginTop: spacing.lg }}
+            />
+          ) : (
+            <Text style={styles.detailLine}>Peça ao síndico para fazer a migração.</Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Equipamentos</Text>
-        {profile?.role === 'sindico' && (
+        {isSindico && (
           <Pressable style={styles.newButton} onPress={() => setFormOpen(true)}>
             <Ionicons name="add" size={16} color={colors.textOnPrimary} />
             <Text style={styles.newButtonText}>Novo equipamento</Text>
@@ -67,11 +163,11 @@ export default function EquipamentosScreen() {
         )}
       </View>
 
-      {isWeb && items.length > 0 && (
+      {isWeb && assets.length > 0 && (
         <View style={[styles.row, styles.tableHeader]}>
           <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 2 }]}>Nome</Text>
           <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Local</Text>
-          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Frequência</Text>
+          <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Planos</Text>
           <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Próxima data</Text>
           <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Responsável</Text>
           <Text style={[styles.tableCell, styles.tableHeaderText, { flex: 1 }]}>Status</Text>
@@ -79,7 +175,7 @@ export default function EquipamentosScreen() {
       )}
 
       <FlatList
-        data={items}
+        data={assets}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshing={loading}
@@ -90,17 +186,24 @@ export default function EquipamentosScreen() {
           ) : null
         }
         renderItem={({ item }) => {
-          const urgency = getMaintenanceUrgency(item.next_due_date);
+          const meus = planosDo(item.id);
+          const proxima = proximoVencimento(meus);
+          const urgency = proxima ? getMaintenanceUrgency(proxima) : null;
+          const resumoPlanos =
+            meus.length === 0 ? 'Sem plano' : meus.length === 1 ? '1 plano' : `${meus.length} planos`;
+
           if (isWeb) {
             return (
               <Pressable style={styles.row} onPress={() => setSelected(item)}>
                 <Text style={[styles.tableCell, styles.tableCellStrong, { flex: 2 }]}>{item.name}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{item.location ?? '—'}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{FREQUENCY_LABEL[item.frequency]}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.next_due_date)}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{funcionarioName(item.assigned_to)}</Text>
+                <Text style={[styles.tableCell, { flex: 1 }]}>{item.location_text ?? '—'}</Text>
+                <Text style={[styles.tableCell, { flex: 1 }]}>{resumoPlanos}</Text>
+                <Text style={[styles.tableCell, { flex: 1 }]}>{proxima ? formatDate(proxima) : '—'}</Text>
+                <Text style={[styles.tableCell, { flex: 1 }]}>
+                  {funcionarioName(item.responsible_user_id)}
+                </Text>
                 <View style={{ flex: 1 }}>
-                  <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} />
+                  {urgency ? <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} /> : null}
                 </View>
               </Pressable>
             );
@@ -109,19 +212,21 @@ export default function EquipamentosScreen() {
             <Pressable style={styles.card} onPress={() => setSelected(item)}>
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>{item.name}</Text>
-                <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} />
+                {urgency ? <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} /> : null}
               </View>
               <Text style={styles.cardMeta}>
-                {item.category} • {FREQUENCY_LABEL[item.frequency]}
-                {item.location ? ` • ${item.location}` : ''}
+                {item.category} • {resumoPlanos}
+                {item.location_text ? ` • ${item.location_text}` : ''}
               </Text>
-              <Text style={styles.cardMeta}>Próxima data: {formatDate(item.next_due_date)}</Text>
+              <Text style={styles.cardMeta}>
+                {proxima ? `Próxima data: ${formatDate(proxima)}` : 'Nenhum plano de manutenção'}
+              </Text>
             </Pressable>
           );
         }}
       />
 
-      <EquipmentFormModal
+      <AssetFormModal
         visible={formOpen}
         funcionarios={funcionarios}
         onClose={() => setFormOpen(false)}
@@ -131,16 +236,17 @@ export default function EquipamentosScreen() {
         }}
       />
 
-      <EquipmentDetailModal
-        item={selected}
+      <AssetDetailModal
+        asset={selected}
+        planos={selected ? planosDo(selected.id) : []}
         funcionarios={funcionarios}
         fornecedores={fornecedores}
-        canEdit={profile?.role === 'sindico'}
+        canEdit={isSindico}
         onClose={() => setSelected(null)}
         onSaved={() => {
-          setSelected(null);
           load();
         }}
+        onClosed={() => setSelected(null)}
       />
     </View>
   );
@@ -150,19 +256,19 @@ function FrequencyPicker({
   value,
   onChange,
 }: {
-  value: MaintenanceFrequency;
-  onChange: (f: MaintenanceFrequency) => void;
+  value: MaintenanceFrequencyType;
+  onChange: (f: MaintenanceFrequencyType) => void;
 }) {
   return (
     <View style={styles.optionsRow}>
-      {(Object.keys(FREQUENCY_LABEL) as MaintenanceFrequency[]).map((key) => (
+      {PLAN_FREQUENCIES_CALENDARIO.map((key) => (
         <Pressable
           key={key}
           style={[styles.option, value === key && styles.optionActive]}
           onPress={() => onChange(key)}
         >
           <Text style={[styles.optionText, value === key && styles.optionTextActive]}>
-            {FREQUENCY_LABEL[key]}
+            {PLAN_FREQUENCY_LABEL[key]}
           </Text>
         </Pressable>
       ))}
@@ -197,53 +303,51 @@ function AssigneePicker({
   );
 }
 
-function EquipmentFormModal({
+// Só a identidade do equipamento. A recorrência saiu daqui e virou
+// plano — é o que permite ter mais de uma por ativo.
+function AssetFormModal({
   visible,
   funcionarios,
   onClose,
   onSaved,
-  item,
+  asset,
 }: {
   visible: boolean;
   funcionarios: Profile[];
   onClose: () => void;
   onSaved: () => void;
-  item?: MaintenanceItem | null;
+  asset?: Asset | null;
 }) {
   const { session } = useAuth();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
-  const [brand, setBrand] = useState('');
+  const [manufacturer, setManufacturer] = useState('');
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
-  const [frequency, setFrequency] = useState<MaintenanceFrequency>('mensal');
-  const [nextDueDate, setNextDueDate] = useState('');
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [responsavel, setResponsavel] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setName(item?.name ?? '');
-      setCategory(item?.category ?? '');
-      setLocation(item?.location ?? '');
-      setBrand(item?.brand ?? '');
-      setModel(item?.model ?? '');
-      setSerialNumber(item?.serial_number ?? '');
-      setFrequency(item?.frequency ?? 'mensal');
-      setNextDueDate(item?.next_due_date ?? '');
-      setAssignedTo(item?.assigned_to ?? null);
-      setNotes(item?.notes ?? '');
+      setName(asset?.name ?? '');
+      setCategory(asset?.category ?? '');
+      setLocation(asset?.location_text ?? '');
+      setManufacturer(asset?.manufacturer ?? '');
+      setModel(asset?.model ?? '');
+      setSerialNumber(asset?.serial_number ?? '');
+      setResponsavel(asset?.responsible_user_id ?? null);
+      setNotes(asset?.notes ?? '');
       setError(null);
     }
-  }, [visible, item]);
+  }, [visible, asset]);
 
   async function submit() {
     if (!session) return;
-    if (!name.trim() || !category.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(nextDueDate)) {
-      setError('Preencha nome, categoria e a próxima data.');
+    if (!name.trim() || !category.trim()) {
+      setError('Preencha nome e categoria.');
       return;
     }
     setSaving(true);
@@ -251,21 +355,19 @@ function EquipmentFormModal({
     const payload = {
       name: name.trim(),
       category: category.trim(),
-      location: location.trim() || null,
-      brand: brand.trim() || null,
+      location_text: location.trim() || null,
+      manufacturer: manufacturer.trim() || null,
       model: model.trim() || null,
       serial_number: serialNumber.trim() || null,
-      frequency,
-      next_due_date: nextDueDate,
-      assigned_to: assignedTo,
+      responsible_user_id: responsavel,
       notes: notes.trim() || null,
     };
-    const { error: saveError } = item
-      ? await supabase.from('maintenance_items').update(payload).eq('id', item.id)
-      : await supabase.from('maintenance_items').insert({ ...payload, created_by: session.user.id });
+    const { error: saveError } = asset
+      ? await supabase.from('assets').update(payload).eq('id', asset.id)
+      : await supabase.from('assets').insert({ ...payload, created_by: session.user.id });
     setSaving(false);
     if (saveError) {
-      setError(saveError.message);
+      setError(supabaseErrorMessage(saveError, 'Não foi possível salvar.') ?? 'Não foi possível salvar.');
       return;
     }
     onSaved();
@@ -274,7 +376,7 @@ function EquipmentFormModal({
   return (
     <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>{item ? 'Editar equipamento' : 'Novo equipamento'}</Text>
+        <Text style={styles.modalTitle}>{asset ? 'Editar equipamento' : 'Novo equipamento'}</Text>
 
         <TextField label="Nome" value={name} onChangeText={setName} placeholder="Ex: Elevador social" />
         <TextField
@@ -289,7 +391,7 @@ function EquipmentFormModal({
           onChangeText={setLocation}
           placeholder="Ex: Casa de máquinas"
         />
-        <TextField label="Marca (opcional)" value={brand} onChangeText={setBrand} />
+        <TextField label="Marca (opcional)" value={manufacturer} onChangeText={setManufacturer} />
         <TextField label="Modelo (opcional)" value={model} onChangeText={setModel} />
         <TextField
           label="Número de série / patrimônio (opcional)"
@@ -297,16 +399,111 @@ function EquipmentFormModal({
           onChangeText={setSerialNumber}
         />
 
+        <Text style={styles.label}>Responsável pelo equipamento</Text>
+        <AssigneePicker value={responsavel} funcionarios={funcionarios} onChange={setResponsavel} />
+
+        <TextField label="Observações (opcional)" value={notes} onChangeText={setNotes} multiline />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View style={styles.modalButtonsRow}>
+          <Button title="Cancelar" variant="secondary" onPress={onClose} style={styles.flex1} />
+          <Button title="Salvar" onPress={submit} loading={saving} style={styles.flex1} />
+        </View>
+
+        {!asset ? (
+          <Text style={styles.hint}>
+            Depois de salvar, abra o equipamento para adicionar um ou mais planos de manutenção.
+          </Text>
+        ) : null}
+      </ModalFormLayout>
+    </AppModal>
+  );
+}
+
+function PlanFormModal({
+  visible,
+  assetId,
+  plano,
+  funcionarios,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  assetId: string;
+  plano?: MaintenancePlan | null;
+  funcionarios: Profile[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { session } = useAuth();
+  const [name, setName] = useState('');
+  const [frequency, setFrequency] = useState<MaintenanceFrequencyType>('mensal');
+  const [nextDueAt, setNextDueAt] = useState('');
+  const [responsavel, setResponsavel] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setName(plano?.name ?? '');
+      setFrequency(plano?.frequency_type ?? 'mensal');
+      setNextDueAt(plano?.next_due_at ?? '');
+      setResponsavel(plano?.responsible_user_id ?? null);
+      setError(null);
+    }
+  }, [visible, plano]);
+
+  async function submit() {
+    if (!session) return;
+    if (!name.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(nextDueAt)) {
+      setError('Preencha o nome do plano e a próxima data.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const payload = {
+      asset_id: assetId,
+      name: name.trim(),
+      frequency_type: frequency,
+      next_due_at: nextDueAt,
+      responsible_user_id: responsavel,
+    };
+    const { error: saveError } = plano
+      ? await supabase.from('maintenance_plans').update(payload).eq('id', plano.id)
+      : await supabase.from('maintenance_plans').insert({ ...payload, created_by: session.user.id });
+    setSaving(false);
+    if (saveError) {
+      setError(supabaseErrorMessage(saveError, 'Não foi possível salvar.') ?? 'Não foi possível salvar.');
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <AppModal visible={visible} onClose={onClose}>
+      <ModalFormLayout style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>{plano ? 'Editar plano' : 'Novo plano de manutenção'}</Text>
+        <Text style={styles.hint}>
+          Um equipamento pode ter vários planos — por exemplo, troca de filtro mensal e revisão geral
+          anual.
+        </Text>
+
+        <TextField
+          label="O que será feito"
+          value={name}
+          onChangeText={setName}
+          placeholder="Ex: Troca de filtro"
+        />
+
         <Text style={styles.label}>Frequência</Text>
         <FrequencyPicker value={frequency} onChange={setFrequency} />
 
         <Text style={styles.label}>Próxima data</Text>
-        <DateInput value={nextDueDate} onChangeISO={setNextDueDate} />
+        <DateInput value={nextDueAt} onChangeISO={setNextDueAt} />
 
         <Text style={styles.label}>Responsável</Text>
-        <AssigneePicker value={assignedTo} funcionarios={funcionarios} onChange={setAssignedTo} />
-
-        <TextField label="Observações (opcional)" value={notes} onChangeText={setNotes} multiline />
+        <AssigneePicker value={responsavel} funcionarios={funcionarios} onChange={setResponsavel} />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -319,48 +516,70 @@ function EquipmentFormModal({
   );
 }
 
-function EquipmentDetailModal({
-  item,
+function AssetDetailModal({
+  asset,
+  planos,
   funcionarios,
   fornecedores,
   canEdit,
   onClose,
   onSaved,
+  onClosed,
 }: {
-  item: MaintenanceItem | null;
+  asset: Asset | null;
+  planos: MaintenancePlan[];
   funcionarios: Profile[];
   fornecedores: Fornecedor[];
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onClosed: () => void;
 }) {
-  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
+  const [ordens, setOrdens] = useState<WorkOrder[]>([]);
+  const [evidencias, setEvidencias] = useState<WorkOrderEvidence[]>([]);
   const [editing, setEditing] = useState(false);
+  const [planoEmEdicao, setPlanoEmEdicao] = useState<MaintenancePlan | null>(null);
+  const [planFormOpen, setPlanFormOpen] = useState(false);
   const [logFormOpen, setLogFormOpen] = useState(false);
 
-  const loadRecords = useCallback(async () => {
-    if (!item) return;
+  const loadHistorico = useCallback(async () => {
+    if (!asset) return;
     const { data } = await supabase
-      .from('maintenance_records')
+      .from('work_orders')
       .select('*')
-      .eq('maintenance_item_id', item.id)
-      .order('performed_at', { ascending: false });
-    if (data) setRecords(data as MaintenanceRecord[]);
-  }, [item]);
+      .eq('asset_id', asset.id)
+      .order('created_at', { ascending: false });
+    const lista = (data ?? []) as WorkOrder[];
+    setOrdens(lista);
+    if (lista.length) {
+      const { data: ev } = await supabase
+        .from('work_order_evidence')
+        .select('*')
+        .in(
+          'work_order_id',
+          lista.map((o) => o.id)
+        );
+      setEvidencias((ev ?? []) as WorkOrderEvidence[]);
+    } else {
+      setEvidencias([]);
+    }
+  }, [asset]);
 
   useEffect(() => {
     setEditing(false);
     setLogFormOpen(false);
-    loadRecords();
-  }, [item, loadRecords]);
+    setPlanFormOpen(false);
+    setPlanoEmEdicao(null);
+    loadHistorico();
+  }, [asset, loadHistorico]);
 
-  if (!item) return null;
+  if (!asset) return null;
 
   if (editing) {
     return (
-      <EquipmentFormModal
+      <AssetFormModal
         visible
-        item={item}
+        asset={asset}
         funcionarios={funcionarios}
         onClose={() => setEditing(false)}
         onSaved={() => {
@@ -371,28 +590,46 @@ function EquipmentDetailModal({
     );
   }
 
-  const urgency = getMaintenanceUrgency(item.next_due_date);
+  if (planFormOpen) {
+    return (
+      <PlanFormModal
+        visible
+        assetId={asset.id}
+        plano={planoEmEdicao}
+        funcionarios={funcionarios}
+        onClose={() => {
+          setPlanFormOpen(false);
+          setPlanoEmEdicao(null);
+        }}
+        onSaved={() => {
+          setPlanFormOpen(false);
+          setPlanoEmEdicao(null);
+          onSaved();
+        }}
+      />
+    );
+  }
+
+  const proxima = proximoVencimento(planos);
+  const urgency = proxima ? getMaintenanceUrgency(proxima) : null;
 
   return (
-    <AppModal visible={Boolean(item)} onClose={onClose}>
+    <AppModal visible={Boolean(asset)} onClose={onClosed}>
       <ModalFormLayout style={styles.modalContainer}>
         <View style={styles.detailHeaderRow}>
-          <Text style={styles.modalTitle}>{item.name}</Text>
-          <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} />
+          <Text style={styles.modalTitle}>{asset.name}</Text>
+          {urgency ? <Badge label={URGENCY_LABEL[urgency]} color={URGENCY_COLOR[urgency]} /> : null}
         </View>
 
-        <Text style={styles.detailLine}>
-          {item.category} • {FREQUENCY_LABEL[item.frequency]}
-        </Text>
-        {item.location ? <Text style={styles.detailLine}>📍 {item.location}</Text> : null}
-        {item.brand || item.model ? (
-          <Text style={styles.detailLine}>{[item.brand, item.model].filter(Boolean).join(' ')}</Text>
+        <Text style={styles.detailLine}>{asset.category}</Text>
+        {asset.location_text ? <Text style={styles.detailLine}>📍 {asset.location_text}</Text> : null}
+        {asset.manufacturer || asset.model ? (
+          <Text style={styles.detailLine}>{[asset.manufacturer, asset.model].filter(Boolean).join(' ')}</Text>
         ) : null}
-        {item.serial_number ? (
-          <Text style={styles.detailLine}>Nº série/patrimônio: {item.serial_number}</Text>
+        {asset.serial_number ? (
+          <Text style={styles.detailLine}>Nº série/patrimônio: {asset.serial_number}</Text>
         ) : null}
-        <Text style={styles.detailLine}>Próxima manutenção: {formatDate(item.next_due_date)}</Text>
-        {item.notes ? <Text style={styles.detailLine}>{item.notes}</Text> : null}
+        {asset.notes ? <Text style={styles.detailLine}>{asset.notes}</Text> : null}
 
         <View style={styles.modalButtonsRow}>
           {canEdit && (
@@ -401,29 +638,79 @@ function EquipmentDetailModal({
           <Button title="Registrar manutenção" onPress={() => setLogFormOpen(true)} style={styles.flex1} />
         </View>
 
+        <View style={styles.secaoHeader}>
+          <Text style={styles.label}>Planos de manutenção</Text>
+          {canEdit && (
+            <Pressable
+              style={styles.linkButton}
+              onPress={() => {
+                setPlanoEmEdicao(null);
+                setPlanFormOpen(true);
+              }}
+            >
+              <Ionicons name="add" size={14} color={colors.primary} />
+              <Text style={styles.linkButtonText}>Adicionar</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {planos.length === 0 ? (
+          <Text style={styles.empty}>
+            Nenhum plano ainda. Sem plano, este equipamento não gera manutenção preventiva.
+          </Text>
+        ) : (
+          planos.map((p) => {
+            const u = p.next_due_at ? getMaintenanceUrgency(p.next_due_at) : null;
+            return (
+              <Pressable
+                key={p.id}
+                style={styles.planoCard}
+                disabled={!canEdit}
+                onPress={() => {
+                  setPlanoEmEdicao(p);
+                  setPlanFormOpen(true);
+                }}
+              >
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.cardTitle}>{p.name}</Text>
+                  {u ? <Badge label={URGENCY_LABEL[u]} color={URGENCY_COLOR[u]} /> : null}
+                </View>
+                <Text style={styles.cardMeta}>
+                  {PLAN_FREQUENCY_LABEL[p.frequency_type]}
+                  {p.next_due_at ? ` • Próxima: ${formatDate(p.next_due_at)}` : ''}
+                  {!p.active ? ' • Inativo' : ''}
+                </Text>
+              </Pressable>
+            );
+          })
+        )}
+
         <Text style={[styles.label, { marginTop: spacing.xl }]}>Histórico</Text>
-        {records.length === 0 && <Text style={styles.empty}>Nenhuma manutenção registrada ainda.</Text>}
-        {records.map((record) => {
-          const fornecedor = fornecedores.find((f) => f.id === record.fornecedor_id);
-          const subtitleParts = [new Date(record.performed_at).toLocaleString('pt-BR')];
-          if (fornecedor) subtitleParts.push(`Fornecedor: ${fornecedor.name}`);
+        {ordens.length === 0 && <Text style={styles.empty}>Nenhuma manutenção registrada ainda.</Text>}
+        {ordens.map((os) => {
+          const minhas = evidencias.filter((e) => e.work_order_id === os.id);
+          const fotos = minhas.filter((e) => e.kind.startsWith('foto')).map((e) => e.file_url);
+          const om = minhas.find((e) => e.kind === 'om_fornecedor');
+          const fornecedor = fornecedores.find((f) => f.id === os.supplier_id);
+          const partes = [new Date(os.created_at).toLocaleString('pt-BR')];
+          if (fornecedor) partes.push(`Fornecedor: ${fornecedor.name}`);
           return (
             <RecordCard
-              key={record.id}
-              recordType="maintenance_record"
-              recordId={record.id}
-              title={record.type === 'preventiva' ? 'Preventiva' : 'Corretiva'}
-              subtitle={subtitleParts.join(' • ')}
-              badge={{ label: record.status, color: colors.primary }}
-              photoPaths={record.photo_urls}
+              key={os.id}
+              recordType="work_order"
+              recordId={os.id}
+              title={`OS #${os.number ?? '—'} • ${os.title}`}
+              subtitle={partes.join(' • ')}
+              badge={{ label: WO_STATUS_LABEL[os.status], color: WO_STATUS_COLOR[os.status] }}
+              photoPaths={fotos}
             >
-              <Text style={styles.detailLine}>{record.description}</Text>
-              {record.om_file_url && (
+              {os.description ? <Text style={styles.detailLine}>{os.description}</Text> : null}
+              {om && (
                 <View style={{ marginTop: spacing.sm }}>
                   <AttachmentPreview
-                    path={record.om_file_url}
-                    mimeType={record.om_mime_type ?? 'application/octet-stream'}
-                    fileName={record.om_file_name ?? 'OM'}
+                    path={om.file_url}
+                    mimeType={om.mime_type ?? 'application/octet-stream'}
+                    fileName={om.file_name ?? 'OM'}
                   />
                 </View>
               )}
@@ -431,17 +718,18 @@ function EquipmentDetailModal({
           );
         })}
 
-        <Button title="Fechar" variant="secondary" onPress={onClose} style={{ marginTop: spacing.md }} />
+        <Button title="Fechar" variant="secondary" onPress={onClosed} style={{ marginTop: spacing.md }} />
       </ModalFormLayout>
 
       <LogMaintenanceModal
         visible={logFormOpen}
-        item={item}
+        asset={asset}
+        planos={planos}
         fornecedores={fornecedores}
         onClose={() => setLogFormOpen(false)}
         onSaved={() => {
           setLogFormOpen(false);
-          loadRecords();
+          loadHistorico();
           onSaved();
         }}
       />
@@ -478,18 +766,21 @@ function FornecedorPicker({
 
 function LogMaintenanceModal({
   visible,
-  item,
+  asset,
+  planos,
   fornecedores,
   onClose,
   onSaved,
 }: {
   visible: boolean;
-  item: MaintenanceItem;
+  asset: Asset;
+  planos: MaintenancePlan[];
   fornecedores: Fornecedor[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { session, profile } = useAuth();
+  const [planoId, setPlanoId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [fornecedorId, setFornecedorId] = useState<string | null>(null);
@@ -499,13 +790,14 @@ function LogMaintenanceModal({
 
   useEffect(() => {
     if (visible) {
+      setPlanoId(planos.length === 1 ? planos[0].id : null);
       setDescription('');
       setPhotos([]);
       setFornecedorId(null);
       setOmFile(null);
       setError(null);
     }
-  }, [visible]);
+  }, [visible, planos]);
 
   async function submit() {
     if (!session || !profile) return;
@@ -522,19 +814,64 @@ function LogMaintenanceModal({
       const omPath = omFile
         ? await uploadFile(omFile.uri, 'maintenance', session.user.id, profile.condominio_id, omFile.mimeType, omFile.name)
         : null;
-      const { error: insertError } = await supabase.from('maintenance_records').insert({
-        maintenance_item_id: item.id,
-        type: 'preventiva',
-        description: description.trim(),
-        photo_urls: photoPaths,
-        performed_by: session.user.id,
-        status: 'concluida',
-        fornecedor_id: fornecedorId,
-        om_file_url: omPath,
-        om_file_name: omFile?.name ?? null,
-        om_mime_type: omFile?.mimeType ?? null,
-      });
+
+      const plano = planos.find((p) => p.id === planoId);
+
+      // Entra como "em execução" e só depois é concluída, em vez de
+      // nascer concluída: a máquina de estados do banco só age em
+      // UPDATE, e é a conclusão que empurra o vencimento do plano.
+      const { data: os, error: insertError } = await supabase
+        .from('work_orders')
+        .insert({
+          origin_type: planoId ? 'preventiva' : 'solicitacao_direta',
+          maintenance_plan_id: planoId,
+          asset_id: asset.id,
+          title: plano ? plano.name : `Manutenção — ${asset.name}`,
+          description: description.trim(),
+          category: asset.category,
+          status: 'em_execucao',
+          started_at: new Date().toISOString(),
+          requested_by: session.user.id,
+          assigned_user_id: session.user.id,
+          supplier_id: fornecedorId,
+        })
+        .select()
+        .single();
       if (insertError) throw insertError;
+
+      const evidencias = [
+        ...photoPaths.map((url) => ({
+          work_order_id: os!.id,
+          kind: 'foto_depois',
+          file_url: url,
+          uploaded_by: session.user.id,
+        })),
+        ...(omPath
+          ? [
+              {
+                work_order_id: os!.id,
+                kind: 'om_fornecedor',
+                file_url: omPath,
+                file_name: omFile?.name ?? null,
+                mime_type: omFile?.mimeType ?? null,
+                uploaded_by: session.user.id,
+              },
+            ]
+          : []),
+      ];
+      if (evidencias.length) {
+        const { error: evError } = await supabase.from('work_order_evidence').insert(evidencias);
+        if (evError) throw evError;
+      }
+
+      // Por último, para que o registro esteja completo quando o
+      // vencimento do plano avançar.
+      const { error: concluirError } = await supabase
+        .from('work_orders')
+        .update({ status: 'concluida' })
+        .eq('id', os!.id);
+      if (concluirError) throw concluirError;
+
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível salvar.');
@@ -546,7 +883,34 @@ function LogMaintenanceModal({
   return (
     <AppModal visible={visible} onClose={onClose}>
       <ModalFormLayout style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>Registrar manutenção — {item.name}</Text>
+        <Text style={styles.modalTitle}>Registrar manutenção — {asset.name}</Text>
+
+        {planos.length > 0 && (
+          <>
+            <Text style={styles.label}>De qual plano</Text>
+            <View style={styles.optionsRow}>
+              <Pressable
+                style={[styles.option, planoId === null && styles.optionActive]}
+                onPress={() => setPlanoId(null)}
+              >
+                <Text style={[styles.optionText, planoId === null && styles.optionTextActive]}>
+                  Fora de plano
+                </Text>
+              </Pressable>
+              {planos.map((p) => (
+                <Pressable
+                  key={p.id}
+                  style={[styles.option, planoId === p.id && styles.optionActive]}
+                  onPress={() => setPlanoId(p.id)}
+                >
+                  <Text style={[styles.optionText, planoId === p.id && styles.optionTextActive]}>
+                    {p.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
 
         <TextField
           label="O que foi feito"
@@ -577,8 +941,9 @@ function LogMaintenanceModal({
         </View>
 
         <Text style={styles.hint}>
-          A próxima data de vencimento deste equipamento é recalculada automaticamente a partir de hoje, de acordo
-          com a frequência dele.
+          {planoId
+            ? 'Ao concluir, o próximo vencimento do plano avança um ciclo a partir da data programada — não da data de hoje, para a periodicidade não desalinhar do calendário.'
+            : 'Sem plano vinculado, esta manutenção fica registrada no histórico do equipamento mas não altera nenhum vencimento.'}
         </Text>
       </ModalFormLayout>
     </AppModal>
@@ -587,6 +952,16 @@ function LogMaintenanceModal({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  carregando: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  avisoCorte: {
+    margin: spacing.lg,
+    padding: spacing.xl,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    gap: spacing.xs,
+    alignItems: 'flex-start',
+    ...cardShadow,
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -625,9 +1000,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     ...cardShadow,
   },
+  planoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   cardTitle: { fontFamily: fontFamily.semibold, fontSize: fontSize.md, color: colors.textPrimary, flex: 1, marginRight: spacing.sm },
   cardMeta: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: spacing.xs },
+  secaoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.xl },
+  linkButton: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  linkButtonText: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.primary },
   detailHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   detailLine: { fontFamily: fontFamily.regular, fontSize: fontSize.base, color: colors.textSecondary, marginTop: spacing.xs },
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },

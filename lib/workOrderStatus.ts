@@ -1,5 +1,41 @@
 import { colors } from './theme';
-import type { IncidentStatus, WorkOrderPriority, WorkOrderStatus } from './types';
+import type {
+  IncidentStatus,
+  MaintenanceFrequencyType,
+  WorkOrderPriority,
+  WorkOrderStatus,
+} from './types';
+
+// As 8 frequências de calendário mais os 3 gatilhos não temporais. Os
+// três últimos existem no banco desde a 2A e ainda não têm interface
+// própria — aparecem aqui para que um plano criado por outro caminho
+// não mostre o valor cru na tela.
+export const PLAN_FREQUENCY_LABEL: Record<MaintenanceFrequencyType, string> = {
+  diaria: 'Diária',
+  semanal: 'Semanal',
+  quinzenal: 'Quinzenal',
+  mensal: 'Mensal',
+  bimestral: 'Bimestral',
+  trimestral: 'Trimestral',
+  semestral: 'Semestral',
+  anual: 'Anual',
+  data_especifica: 'Data específica',
+  medidor: 'Por leitura de medidor',
+  horas_funcionamento: 'Por horas de funcionamento',
+};
+
+// As que a interface oferece hoje: só as de calendário, porque as
+// demais precisam de um campo de leitura que ainda não existe.
+export const PLAN_FREQUENCIES_CALENDARIO: MaintenanceFrequencyType[] = [
+  'diaria',
+  'semanal',
+  'quinzenal',
+  'mensal',
+  'bimestral',
+  'trimestral',
+  'semestral',
+  'anual',
+];
 
 // O banco aceita 16 estados de ordem e 9 de ocorrência (a especificação
 // inteira). A interface expõe menos: dezesseis estados numa tela de
