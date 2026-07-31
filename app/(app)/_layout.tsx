@@ -88,6 +88,8 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen name="mensagens" options={{ href: null, title: 'Mensagens' }} />
+      <Tabs.Screen name="encomendas" options={{ href: null, title: 'Encomendas' }} />
+      <Tabs.Screen name="unidades" options={{ href: null, title: 'Unidades' }} />
       <Tabs.Screen name="documentos" options={{ href: null, title: 'Documentos' }} />
       <Tabs.Screen name="historico" options={{ href: null, title: 'Histórico' }} />
       <Tabs.Screen name="equipe" options={{ href: null, title: 'Equipe' }} />

@@ -12,7 +12,10 @@ export type RecordType =
   | 'work_order'
   | 'asset'
   | 'maintenance_plan'
-  | 'location';
+  | 'location'
+  // Portaria
+  | 'delivery'
+  | 'unit';
 
 export interface Profile {
   id: string;
@@ -558,4 +561,54 @@ export interface WorkOrderStepResult {
   notes: string | null;
   answered_by: string | null;
   answered_at: string;
+}
+
+// ============================================================
+// Portaria — unidades e encomendas
+// ============================================================
+
+export interface Unit {
+  id: string;
+  condominio_id: string;
+  /** Vazio quando o prédio não tem blocos. */
+  block: string;
+  number: string;
+  floor: string | null;
+  /** Coluna gerada no banco: "A-302", ou só "302" sem bloco. */
+  label: string;
+  notes: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
+}
+
+export type DeliveryStatus = 'recebida' | 'entregue' | 'devolvida';
+
+export interface Delivery {
+  id: string;
+  condominio_id: string;
+  unit_id: string;
+  /** Para quem, quando não é o titular da unidade. */
+  recipient_name: string | null;
+  store: string | null;
+  tracking_code: string | null;
+  notes: string | null;
+  status: DeliveryStatus;
+  received_at: string;
+  received_by: string | null;
+  photo_urls: string[];
+  /** Preenchidos pelo banco ao dar baixa — não pela tela. */
+  delivered_at: string | null;
+  delivered_by: string | null;
+  delivery_photo_urls: string[];
+  returned_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deletion_reason: string | null;
 }

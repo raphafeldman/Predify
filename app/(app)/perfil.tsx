@@ -33,6 +33,12 @@ export default function PerfilScreen() {
             <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
           </Pressable>
 
+          <Pressable style={styles.linkRow} onPress={() => router.push('/encomendas')}>
+            <Ionicons name="cube-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Encomendas</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
+
           <Pressable style={styles.linkRow} onPress={() => router.push('/documentos')}>
             <Ionicons name="document-text-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.linkText}>Documentos</Text>
@@ -75,6 +81,11 @@ export default function PerfilScreen() {
 
       {profile?.role === 'sindico' && (
         <>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/unidades')}>
+            <Ionicons name="business-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.linkText}>Gerenciar unidades</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={styles.chevron} />
+          </Pressable>
           <Pressable style={styles.linkRow} onPress={() => router.push('/rotinas')}>
             <Ionicons name="repeat-outline" size={18} color={colors.textSecondary} />
             <Text style={styles.linkText}>Gerenciar rotinas</Text>
