@@ -11,18 +11,21 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
+// Continua servindo às rotinas de checklist, que têm frequência própria
+// e não fazem parte do domínio de manutenção migrado na Fase 2.
 import { FREQUENCY_LABEL } from '../../lib/frequency';
 import { getInvokeErrorMessage, supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, spacing } from '../../lib/theme';
+import { WO_STATUS_ABERTOS } from '../../lib/workOrderStatus';
 import type {
+  Asset,
   ChecklistTemplate,
   DocumentItem,
-  MaintenanceItem,
-  MaintenanceRecord,
-  Occurrence,
+  Incident,
   Profile,
   ServiceRequest,
   Task,
+  WorkOrder,
 } from '../../lib/types';
 
 export default function AdminCondominioScreen() {
@@ -33,7 +36,7 @@ export default function AdminCondominioScreen() {
   const [loading, setLoading] = useState(true);
   const [equipe, setEquipe] = useState<Profile[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [equipamentos, setEquipamentos] = useState<MaintenanceItem[]>([]);
+  const [equipamentos, setEquipamentos] = useState<Asset[]>([]);
   const [rotinas, setRotinas] = useState<ChecklistTemplate[]>([]);
   const [prestadores, setPrestadores] = useState<ServiceRequest[]>([]);
   const [openOccurrences, setOpenOccurrences] = useState(0);
@@ -47,10 +50,10 @@ export default function AdminCondominioScreen() {
     // não deveria nem tentar buscar o que não vai poder mostrar.
     if (!condominioId || !isPlatformAdmin) return;
     setLoading(true);
-    const [profilesRes, occRes, taskRes, maintRes, docRes, itemsRes, templatesRes, requestsRes] = await Promise.all([
+    const [profilesRes, ordensRes, taskRes, incidentsRes, docRes, itemsRes, templatesRes, requestsRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('condominio_id', condominioId).order('full_name'),
       supabase
-        .from('occurrences')
+        .from('work_orders')
         .select('*')
         .eq('condominio_id', condominioId)
         .order('created_at', { ascending: false })
@@ -62,7 +65,7 @@ export default function AdminCondominioScreen() {
         .order('created_at', { ascending: false })
         .limit(20),
       supabase
-        .from('maintenance_records')
+        .from('incidents')
         .select('*')
         .eq('condominio_id', condominioId)
         .order('created_at', { ascending: false })
@@ -73,7 +76,7 @@ export default function AdminCondominioScreen() {
         .eq('condominio_id', condominioId)
         .order('created_at', { ascending: false })
         .limit(10),
-      supabase.from('maintenance_items').select('*').eq('condominio_id', condominioId).order('name'),
+      supabase.from('assets').select('*').eq('condominio_id', condominioId).order('name'),
       supabase.from('checklist_templates').select('*').eq('condominio_id', condominioId).order('title'),
       supabase
         .from('service_requests')
@@ -84,23 +87,23 @@ export default function AdminCondominioScreen() {
     ]);
 
     if (profilesRes.data) setEquipe(profilesRes.data as Profile[]);
-    if (itemsRes.data) setEquipamentos(itemsRes.data as MaintenanceItem[]);
+    if (itemsRes.data) setEquipamentos(itemsRes.data as Asset[]);
     if (templatesRes.data) setRotinas(templatesRes.data as ChecklistTemplate[]);
     if (requestsRes.data) setPrestadores(requestsRes.data as ServiceRequest[]);
 
-    const occurrences = (occRes.data as Occurrence[]) ?? [];
-    setOpenOccurrences(occurrences.filter((o) => o.status !== 'concluida' && o.status !== 'cancelada').length);
+    const ordens = (ordensRes.data as WorkOrder[]) ?? [];
+    setOpenOccurrences(ordens.filter((o) => WO_STATUS_ABERTOS.includes(o.status)).length);
 
     const merged: FeedItem[] = [
-      ...occurrences.map((d) => ({ kind: 'occurrence' as const, id: d.id, created_at: d.created_at, data: d })),
-      ...((taskRes.data as Task[]) ?? []).map((d) => ({
-        kind: 'task' as const,
+      ...ordens.map((d) => ({ kind: 'work_order' as const, id: d.id, created_at: d.created_at, data: d })),
+      ...((incidentsRes.data as Incident[]) ?? []).map((d) => ({
+        kind: 'incident' as const,
         id: d.id,
         created_at: d.created_at,
         data: d,
       })),
-      ...((maintRes.data as MaintenanceRecord[]) ?? []).map((d) => ({
-        kind: 'maintenance' as const,
+      ...((taskRes.data as Task[]) ?? []).map((d) => ({
+        kind: 'task' as const,
         id: d.id,
         created_at: d.created_at,
         data: d,
@@ -184,8 +187,12 @@ export default function AdminCondominioScreen() {
           equipamentos.map((item) => (
             <View key={item.id} style={styles.simpleRow}>
               <Text style={styles.simpleRowTitle}>{item.name}</Text>
+              {/* A periodicidade saiu do equipamento e virou plano; esta
+                  é uma visão de suporte, e listar planos aqui exigiria
+                  mais uma consulta sem ganho para quem dá suporte. */}
               <Text style={styles.simpleRowMeta}>
-                {FREQUENCY_LABEL[item.frequency]} • próxima: {new Date(item.next_due_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                {item.category}
+                {item.location_text ? ` • ${item.location_text}` : ''}
               </Text>
             </View>
           ))

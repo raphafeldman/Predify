@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { supabase } from '../../lib/supabase';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
-import type { DocumentItem, MaintenanceRecord, Occurrence, Task } from '../../lib/types';
+import type { DocumentItem, Incident, Task, WorkOrder } from '../../lib/types';
 import { FeedCard, type FeedItem } from './index';
 
 const PERIODS = [
@@ -15,11 +15,16 @@ const PERIODS = [
 
 type TypeFilter = 'todos' | FeedItem['kind'];
 
+// "Manutenção" saiu como filtro próprio: um registro de manutenção agora
+// é uma ordem de serviço preventiva, e apareceria duas vezes se
+// continuasse listado à parte. Em troca, ocorrência ganhou filtro —
+// nem toda ocorrência vira ordem, e poder ver só elas é justamente o
+// que a separação permitiu.
 const TYPE_LABELS: Record<TypeFilter, string> = {
   todos: 'Todos',
-  occurrence: 'Ordens de Serviço',
+  work_order: 'Ordens de Serviço',
+  incident: 'Ocorrências',
   task: 'Tarefas',
-  maintenance: 'Manutenção',
   document: 'Documentos',
 };
 
@@ -31,32 +36,28 @@ export default function HistoricoScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [occRes, taskRes, maintRes, docRes] = await Promise.all([
-      supabase.from('occurrences').select('*').order('created_at', { ascending: false }).limit(200),
+    const [ordensRes, incidentsRes, taskRes, docRes] = await Promise.all([
+      supabase.from('work_orders').select('*').order('created_at', { ascending: false }).limit(200),
+      supabase.from('incidents').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(200),
-      supabase
-        .from('maintenance_records')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200),
       supabase.from('documents').select('*').order('created_at', { ascending: false }).limit(200),
     ]);
 
     const merged: FeedItem[] = [
-      ...((occRes.data as Occurrence[]) ?? []).map((d) => ({
-        kind: 'occurrence' as const,
+      ...((ordensRes.data as WorkOrder[]) ?? []).map((d) => ({
+        kind: 'work_order' as const,
+        id: d.id,
+        created_at: d.created_at,
+        data: d,
+      })),
+      ...((incidentsRes.data as Incident[]) ?? []).map((d) => ({
+        kind: 'incident' as const,
         id: d.id,
         created_at: d.created_at,
         data: d,
       })),
       ...((taskRes.data as Task[]) ?? []).map((d) => ({
         kind: 'task' as const,
-        id: d.id,
-        created_at: d.created_at,
-        data: d,
-      })),
-      ...((maintRes.data as MaintenanceRecord[]) ?? []).map((d) => ({
-        kind: 'maintenance' as const,
         id: d.id,
         created_at: d.created_at,
         data: d,

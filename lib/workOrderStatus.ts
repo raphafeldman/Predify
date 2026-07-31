@@ -146,3 +146,21 @@ const TRANSICOES: Record<WorkOrderStatus, WorkOrderStatus[]> = {
 export function podeIrPara(de: WorkOrderStatus, para: WorkOrderStatus): boolean {
   return (TRANSICOES[de] ?? []).includes(para);
 }
+
+/** Ordens que ainda demandam trabalho — o que o painel chama de "em aberto". */
+export const WO_STATUS_ABERTOS: WorkOrderStatus[] = [
+  'aberta',
+  'em_triagem',
+  'aguardando_aprovacao',
+  'aguardando_orcamento',
+  'aprovada',
+  'programada',
+  'em_execucao',
+  'pausada',
+  'aguardando_material',
+  'aguardando_fornecedor',
+  'reaberta',
+];
+
+/** Ordens dadas por terminadas. Cancelada não entra: não houve trabalho. */
+export const WO_STATUS_CONCLUIDOS: WorkOrderStatus[] = ['concluida', 'aguardando_validacao', 'encerrada'];

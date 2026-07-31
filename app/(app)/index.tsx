@@ -13,7 +13,6 @@ import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/TextField';
 import { PERIOD_LABEL, VisaoGeralCard, type VisaoGeralPeriod, type VisaoGeralStat } from '../../components/VisaoGeralCard';
 import { AdminPanel } from './admin';
-import { STATUS_COLOR, STATUS_LABEL } from './ordens';
 import { useAuth } from '../../lib/auth-context';
 import { CATEGORY_COLOR, CATEGORY_ICON } from '../../lib/categories';
 import { FREQUENCY_LABEL } from '../../lib/frequency';
@@ -22,14 +21,22 @@ import { supabase } from '../../lib/supabase';
 import { supabaseErrorMessage } from '../../lib/supabaseError';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useRotinaChecklist } from '../../lib/useRotinaChecklist';
+import {
+  INCIDENT_STATUS_COLOR,
+  INCIDENT_STATUS_LABEL,
+  WO_STATUS_ABERTOS,
+  WO_STATUS_COLOR,
+  WO_STATUS_CONCLUIDOS,
+  WO_STATUS_LABEL,
+} from '../../lib/workOrderStatus';
 import type {
   ChecklistEntry,
   ChecklistTemplate,
   DocumentItem,
-  MaintenanceRecord,
-  Occurrence,
+  Incident,
   Profile,
   Task,
+  WorkOrder,
 } from '../../lib/types';
 
 function firstName(fullName?: string | null) {
@@ -76,7 +83,7 @@ export default function HomeScreen() {
   return profile.role === 'sindico' ? <SindicoHome /> : <FuncionarioHome />;
 }
 
-function OrdemActivityRow({ ordem }: { ordem: Occurrence }) {
+function OrdemActivityRow({ ordem }: { ordem: WorkOrder }) {
   const router = useRouter();
   const icon = CATEGORY_ICON[ordem.category] ?? CATEGORY_ICON.outro;
   const iconColor = CATEGORY_COLOR[ordem.category] ?? CATEGORY_COLOR.outro;
@@ -90,7 +97,8 @@ function OrdemActivityRow({ ordem }: { ordem: Occurrence }) {
           {ordem.title}
         </Text>
         <Text style={styles.activityMeta}>
-          OS #{ordem.os_number} · <Text style={{ color: STATUS_COLOR[ordem.status] }}>{STATUS_LABEL[ordem.status]}</Text>
+          OS #{ordem.number ?? '—'} ·{' '}
+          <Text style={{ color: WO_STATUS_COLOR[ordem.status] }}>{WO_STATUS_LABEL[ordem.status]}</Text>
         </Text>
       </View>
       <Text style={styles.activityDate}>{formatRelativeDateTime(ordem.created_at)}</Text>
@@ -119,9 +127,9 @@ function FuncionarioHome() {
     const [tasksRes, occRes, unreadRes, condoRes] = await Promise.all([
       supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(50),
       supabase
-        .from('occurrences')
+        .from('work_orders')
         .select('id', { count: 'exact', head: true })
-        .in('status', ['aberta', 'em_andamento']),
+        .in('status', WO_STATUS_ABERTOS),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false),
       profile?.condominio_id
         ? supabase.from('condominios').select('name').eq('id', profile.condominio_id).single()
@@ -472,17 +480,21 @@ function NewTaskModal({
 // Serviço) + Tarefas — layout inspirado no app preview do manual da marca.
 // ============================================================
 
+// Manutenção deixou de ser um tipo à parte no feed: um registro de
+// manutenção agora É uma ordem de serviço (preventiva). Em compensação,
+// a ocorrência ganhou entrada própria — ela é o fato observado, e nem
+// toda ocorrência vira trabalho.
 export type FeedItem =
-  | { kind: 'occurrence'; id: string; created_at: string; data: Occurrence }
+  | { kind: 'work_order'; id: string; created_at: string; data: WorkOrder }
+  | { kind: 'incident'; id: string; created_at: string; data: Incident }
   | { kind: 'task'; id: string; created_at: string; data: Task }
-  | { kind: 'maintenance'; id: string; created_at: string; data: MaintenanceRecord }
   | { kind: 'document'; id: string; created_at: string; data: DocumentItem };
 
 function SindicoHome() {
   const { profile } = useAuth();
   const router = useRouter();
   const rotina = useRotinaChecklist();
-  const [recentOrdens, setRecentOrdens] = useState<Occurrence[]>([]);
+  const [recentOrdens, setRecentOrdens] = useState<WorkOrder[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [funcionarios, setFuncionarios] = useState<Profile[]>([]);
   const [condominioName, setCondominioName] = useState<string | null>(null);
@@ -510,23 +522,29 @@ function SindicoHome() {
       unreadRes,
       condoRes,
     ] = await Promise.all([
-      supabase.from('occurrences').select('*').order('created_at', { ascending: false }).limit(8),
+      supabase.from('work_orders').select('*').order('created_at', { ascending: false }).limit(8),
       supabase
-        .from('occurrences')
+        .from('work_orders')
         .select('id', { count: 'exact', head: true })
-        .in('status', ['aberta', 'em_andamento'])
+        .in('status', WO_STATUS_ABERTOS)
         .gte('created_at', periodStart),
       supabase
-        .from('occurrences')
+        .from('work_orders')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'concluida')
-        .gte('resolved_at', periodStart),
+        .in('status', WO_STATUS_CONCLUIDOS)
+        .gte('completed_at', periodStart),
       supabase
-        .from('occurrences')
+        .from('work_orders')
         .select('estimated_cost')
         .gte('created_at', periodStart)
         .not('estimated_cost', 'is', null),
-      supabase.from('maintenance_items').select('id', { count: 'exact', head: true }).lte('next_due_date', in7DaysStr),
+      // Quem vence é o plano, não o equipamento — e só o plano ativo.
+      supabase
+        .from('maintenance_plans')
+        .select('id', { count: 'exact', head: true })
+        .eq('active', true)
+        .is('deleted_at', null)
+        .lte('next_due_at', in7DaysStr),
       supabase.from('tasks').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('profiles').select('*').eq('role', 'funcionario').eq('active', true),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('read', false),
@@ -535,7 +553,7 @@ function SindicoHome() {
         : Promise.resolve({ data: null }),
     ]);
 
-    setRecentOrdens((recentRes.data as Occurrence[]) ?? []);
+    setRecentOrdens((recentRes.data as WorkOrder[]) ?? []);
     setOpenOrdersCount(openCountRes.count ?? 0);
     setConcludedThisMonth(concludedCountRes.count ?? 0);
     const costSum = ((costRes.data as { estimated_cost: number | null }[]) ?? []).reduce(
@@ -555,7 +573,8 @@ function SindicoHome() {
     load();
     const channel = supabase
       .channel('sindico-feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'occurrences' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'work_orders' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => load())
       .subscribe();
@@ -694,18 +713,40 @@ function SindicoHome() {
 }
 
 export function FeedCard({ item }: { item: FeedItem }) {
-  if (item.kind === 'occurrence') {
+  if (item.kind === 'work_order') {
     const o = item.data;
+    const prefixo = o.origin_type === 'preventiva' ? '🔧 ' : '';
     return (
       <RecordCard
-        recordType="occurrence"
+        recordType="work_order"
         recordId={o.id}
-        title={o.title}
+        title={`${prefixo}${o.title}`}
         subtitle={new Date(o.created_at).toLocaleString('pt-BR')}
-        badge={{ label: `OS #${o.os_number} • ${STATUS_LABEL[o.status]}`, color: STATUS_COLOR[o.status] }}
-        photoPaths={o.photo_urls}
+        badge={{
+          label: `OS #${o.number ?? '—'} • ${WO_STATUS_LABEL[o.status]}`,
+          color: WO_STATUS_COLOR[o.status],
+        }}
       >
         <Text style={styles.description}>{o.description}</Text>
+      </RecordCard>
+    );
+  }
+
+  if (item.kind === 'incident') {
+    const i = item.data;
+    return (
+      <RecordCard
+        recordType="incident"
+        recordId={i.id}
+        title={`👁 ${i.title}`}
+        subtitle={new Date(i.created_at).toLocaleString('pt-BR')}
+        badge={{
+          label: `#${i.number ?? '—'} • ${INCIDENT_STATUS_LABEL[i.status]}`,
+          color: INCIDENT_STATUS_COLOR[i.status],
+        }}
+        photoPaths={i.photo_urls}
+      >
+        <Text style={styles.description}>{i.description}</Text>
       </RecordCard>
     );
   }
@@ -730,22 +771,6 @@ export function FeedCard({ item }: { item: FeedItem }) {
           </Text>
         ) : null}
         {t.description ? <Text style={styles.description}>{t.description}</Text> : null}
-      </RecordCard>
-    );
-  }
-
-  if (item.kind === 'maintenance') {
-    const m = item.data;
-    return (
-      <RecordCard
-        recordType="maintenance_record"
-        recordId={m.id}
-        title={`🔧 Manutenção ${m.type === 'preventiva' ? 'preventiva' : 'corretiva'}`}
-        subtitle={new Date(m.created_at).toLocaleString('pt-BR')}
-        badge={{ label: m.status, color: colors.primary }}
-        photoPaths={m.photo_urls}
-      >
-        <Text style={styles.description}>{m.description}</Text>
       </RecordCard>
     );
   }
