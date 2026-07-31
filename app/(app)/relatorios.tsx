@@ -12,8 +12,12 @@ import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
-import type { Condominio, OccurrenceStatus } from '../../lib/types';
-import { STATUS_LABEL } from './ordens';
+import type { Condominio, WorkOrderStatus } from '../../lib/types';
+import {
+  WO_STATUS_ABERTOS,
+  WO_STATUS_CONCLUIDOS,
+  WO_STATUS_LABEL,
+} from '../../lib/workOrderStatus';
 
 type PeriodFilter = 'diario' | 'semanal' | 'mensal' | 'anual';
 
@@ -104,13 +108,13 @@ export default function RelatoriosScreen() {
     const periodStart = getPeriodStart(filter);
     const periodStartIso = `${periodStart}T00:00:00.000Z`;
 
-    const [occRes, taskRes, maintRes, checklistRes] = await Promise.all([
-      supabase.from('occurrences').select('*').gte('created_at', periodStartIso),
+    // Ordens e manutenções saem da MESMA tabela agora, separadas pela
+    // origem: preventiva/inspeção nasceram de um plano; as demais são
+    // trabalho pedido. Sem essa separação, uma preventiva apareceria nas
+    // duas seções do relatório.
+    const [ordensRes, taskRes, checklistRes] = await Promise.all([
+      supabase.from('work_orders').select('*, assets(name)').gte('created_at', periodStartIso),
       supabase.from('tasks').select('*').gte('created_at', periodStartIso),
-      supabase
-        .from('maintenance_records')
-        .select('*, maintenance_items(name)')
-        .gte('created_at', periodStartIso),
       supabase
         .from('checklist_entries')
         .select('*, checklist_templates(title), profiles(full_name)')
@@ -118,23 +122,30 @@ export default function RelatoriosScreen() {
         .gte('entry_date', periodStart),
     ]);
 
-    const occurrences = occRes.data ?? [];
+    const ordens = ordensRes.data ?? [];
     const tasks = taskRes.data ?? [];
-    const maintenance = maintRes.data ?? [];
     const checklist = checklistRes.data ?? [];
 
+    const ehManutencao = (o: { origin_type: string }) =>
+      o.origin_type === 'preventiva' || o.origin_type === 'inspecao';
+    const manutencoes = ordens.filter(ehManutencao);
+    const demais = ordens.filter((o) => !ehManutencao(o));
+
     setData({
-      occurrencesResolved: occurrences.filter((o) => o.status === 'concluida').length,
-      occurrencesOpen: occurrences.filter((o) => o.status === 'aberta' || o.status === 'em_andamento').length,
+      occurrencesResolved: ordens.filter((o) =>
+        WO_STATUS_CONCLUIDOS.includes(o.status as WorkOrderStatus)
+      ).length,
+      occurrencesOpen: ordens.filter((o) => WO_STATUS_ABERTOS.includes(o.status as WorkOrderStatus))
+        .length,
       tasksDone: tasks.filter((t) => t.status === 'concluida').length,
       tasksPending: tasks.filter((t) => t.status === 'pendente').length,
-      maintenanceRecords: maintenance.length,
+      maintenanceRecords: manutencoes.length,
       checklistDone: checklist.length,
       itemsByCategory: {
-        'Ordens de Serviço': occurrences
+        'Ordens de Serviço': demais
           .map((o) => ({
-            title: `OS #${o.os_number} — ${o.title}`,
-            status: STATUS_LABEL[o.status as OccurrenceStatus] ?? o.status,
+            title: `OS #${o.number ?? '—'} — ${o.title}`,
+            status: WO_STATUS_LABEL[o.status as WorkOrderStatus] ?? o.status,
             date: o.created_at,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -145,12 +156,11 @@ export default function RelatoriosScreen() {
             date: t.created_at,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-        Manutenções: maintenance
+        Manutenções: manutencoes
           .map((m) => ({
-            title: (m as { maintenance_items?: { name: string } | null }).maintenance_items?.name
-              ?? (m.type === 'preventiva' ? 'Preventiva avulsa' : 'Corretiva avulsa'),
-            status: m.status,
-            date: m.performed_at,
+            title: (m as { assets?: { name: string } | null }).assets?.name ?? m.title,
+            status: WO_STATUS_LABEL[m.status as WorkOrderStatus] ?? m.status,
+            date: m.completed_at ?? m.created_at,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         Rotina: checklist

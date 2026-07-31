@@ -14,13 +14,13 @@ import { uploadFile } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 import { useIsWideScreen } from '../../lib/useIsWideScreen';
-import type { Fornecedor, MaintenanceItem } from '../../lib/types';
+import type { Asset, Fornecedor } from '../../lib/types';
 
 export default function FornecedoresScreen() {
   const { profile } = useAuth();
   const isWeb = useIsWideScreen();
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [items, setItems] = useState<MaintenanceItem[]>([]);
+  const [items, setItems] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<Fornecedor | null>(null);
@@ -28,10 +28,10 @@ export default function FornecedoresScreen() {
   const load = useCallback(async () => {
     const [fornecedoresRes, itemsRes] = await Promise.all([
       supabase.from('fornecedores').select('*').order('name'),
-      supabase.from('maintenance_items').select('*').order('name'),
+      supabase.from('assets').select('*').order('name'),
     ]);
     if (fornecedoresRes.data) setFornecedores(fornecedoresRes.data as Fornecedor[]);
-    if (itemsRes.data) setItems(itemsRes.data as MaintenanceItem[]);
+    if (itemsRes.data) setItems(itemsRes.data as Asset[]);
     setLoading(false);
   }, []);
 
@@ -143,7 +143,7 @@ function EquipmentPicker({
   onChange,
 }: {
   value: string | null;
-  items: MaintenanceItem[];
+  items: Asset[];
   onChange: (id: string | null) => void;
 }) {
   return (
@@ -185,7 +185,7 @@ function FornecedorFormModal({
   fornecedor,
 }: {
   visible: boolean;
-  items: MaintenanceItem[];
+  items: Asset[];
   onClose: () => void;
   onSaved: () => void;
   fornecedor?: Fornecedor | null;
@@ -196,6 +196,11 @@ function FornecedorFormModal({
   const [contactName, setContactName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  // A coluna do banco ainda se chama maintenance_item_id, mas aponta
+  // para o ativo: o backfill da Fase 2B preservou os ids ao copiar
+  // maintenance_items para assets, então o vínculo antigo continua
+  // resolvendo sem tocar em dado. Repontar a chave estrangeira para
+  // `assets` fica para a Fase 2E, junto com a saída das tabelas antigas.
   const [maintenanceItemId, setMaintenanceItemId] = useState<string | null>(null);
   const [contractNotes, setContractNotes] = useState('');
   const [active, setActive] = useState(true);
@@ -344,7 +349,7 @@ function FornecedorDetailModal({
   onSaved,
 }: {
   fornecedor: Fornecedor | null;
-  items: MaintenanceItem[];
+  items: Asset[];
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;

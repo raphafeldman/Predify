@@ -28,27 +28,10 @@ import {
 import type {
   Incident,
   OccurrenceSeverity,
-  OccurrenceStatus,
   Profile,
   WorkOrder,
   WorkOrderStatus,
 } from '../../lib/types';
-
-// Mantidos para as telas que ainda leem `occurrences` (Início e
-// Relatórios). Somem quando elas forem cortadas.
-export const STATUS_LABEL: Record<OccurrenceStatus, string> = {
-  aberta: 'Aberta',
-  em_andamento: 'Em andamento',
-  concluida: 'Concluída',
-  cancelada: 'Cancelada',
-};
-
-export const STATUS_COLOR: Record<OccurrenceStatus, string> = {
-  aberta: colors.warning,
-  em_andamento: colors.primary,
-  concluida: colors.success,
-  cancelada: colors.textMuted,
-};
 
 const SEVERITY_LABEL: Record<OccurrenceSeverity, string> = {
   baixa: 'Baixa',
