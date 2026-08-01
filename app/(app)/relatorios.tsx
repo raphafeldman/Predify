@@ -3,16 +3,15 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppModal } from '../../components/AppModal';
-import { BarChart } from '../../components/BarChart';
 import { ModalFormLayout } from '../../components/ModalFormLayout';
-import { PieChart } from '../../components/PieChart';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextField } from '../../components/ui/TextField';
 import { useAuth } from '../../lib/auth-context';
 import { supabase } from '../../lib/supabase';
 import { cardShadow, colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
-import type { Condominio, WorkOrderStatus } from '../../lib/types';
+import { BarrasHorizontais, Destaques, EvolucaoNoTempo } from '../../components/RelatorioCharts';
+import type { Condominio, Delivery, WorkOrderStatus } from '../../lib/types';
 import {
   WO_STATUS_ABERTOS,
   WO_STATUS_CONCLUIDOS,
@@ -60,6 +59,8 @@ interface ReportItem {
   status: string;
   date: string;
   performedBy?: string;
+  /** Rótulo da unidade, quando o item é de uma encomenda. */
+  unitLabel?: string;
 }
 
 interface ReportData {
@@ -69,20 +70,38 @@ interface ReportData {
   tasksPending: number;
   maintenanceRecords: number;
   checklistDone: number;
+  deliveriesReceived: number;
+  deliveriesDelivered: number;
+  /** Horas médias entre chegar na portaria e ser entregue. */
+  deliveryAvgHours: number | null;
+  /** Volume por dia no período, para a evolução no tempo. */
+  porDia: { label: string; value: number }[];
   itemsByCategory: {
     'Ordens de Serviço': ReportItem[];
     Tarefas: ReportItem[];
     Manutenções: ReportItem[];
+    Encomendas: ReportItem[];
     Rotina: ReportItem[];
   };
 }
 
-const CATEGORY_ORDER: (keyof ReportData['itemsByCategory'])[] = [
+type Categoria = keyof ReportData['itemsByCategory'];
+
+const CATEGORY_ORDER: Categoria[] = [
   'Ordens de Serviço',
   'Tarefas',
   'Manutenções',
+  'Encomendas',
   'Rotina',
 ];
+
+const CATEGORY_COR: Record<Categoria, string> = {
+  'Ordens de Serviço': colors.danger,
+  Tarefas: colors.warning,
+  Manutenções: colors.primary,
+  Encomendas: colors.accent,
+  Rotina: colors.success,
+};
 
 export default function RelatoriosScreen() {
   const { profile } = useAuth();
@@ -92,6 +111,11 @@ export default function RelatoriosScreen() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [condoFormOpen, setCondoFormOpen] = useState(false);
+  // O relatório passa a ser montado: escolhe-se o conteúdo, e a tela e o
+  // PDF mostram exatamente isso.
+  const [categorias, setCategorias] = useState<Categoria[]>([...CATEGORY_ORDER]);
+  const [apartamento, setApartamento] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
 
   const loadCondo = useCallback(async () => {
     if (!profile) return;
@@ -112,7 +136,7 @@ export default function RelatoriosScreen() {
     // origem: preventiva/inspeção nasceram de um plano; as demais são
     // trabalho pedido. Sem essa separação, uma preventiva apareceria nas
     // duas seções do relatório.
-    const [ordensRes, taskRes, checklistRes] = await Promise.all([
+    const [ordensRes, taskRes, checklistRes, encomendasRes] = await Promise.all([
       supabase.from('work_orders').select('*, assets(name)').gte('created_at', periodStartIso),
       supabase.from('tasks').select('*').gte('created_at', periodStartIso),
       supabase
@@ -120,11 +144,42 @@ export default function RelatoriosScreen() {
         .select('*, checklist_templates(title), profiles(full_name)')
         .eq('done', true)
         .gte('entry_date', periodStart),
+      supabase
+        .from('deliveries')
+        .select('*, units(label)')
+        .gte('received_at', periodStartIso)
+        .order('received_at', { ascending: false }),
     ]);
 
     const ordens = ordensRes.data ?? [];
     const tasks = taskRes.data ?? [];
     const checklist = checklistRes.data ?? [];
+    const encomendas = (encomendasRes.data ?? []) as (Delivery & { units?: { label: string } | null })[];
+
+    // Quanto tempo, em média, a encomenda fica parada na portaria — o
+    // número que revela problema de operação, e que nenhum total mostra.
+    const entregues = encomendas.filter((e) => e.status === 'entregue' && e.delivered_at);
+    const horasMedias = entregues.length
+      ? entregues.reduce(
+          (s, e) =>
+            s + (new Date(e.delivered_at as string).getTime() - new Date(e.received_at).getTime()) / 3600000,
+          0
+        ) / entregues.length
+      : null;
+
+    // Volume por dia, para a evolução. Conta tudo que "aconteceu" no dia.
+    const contagemPorDia = new Map<string, number>();
+    const somaDia = (iso: string) => {
+      const dia = iso.slice(0, 10);
+      contagemPorDia.set(dia, (contagemPorDia.get(dia) ?? 0) + 1);
+    };
+    ordens.forEach((o) => somaDia(o.created_at));
+    tasks.forEach((t) => somaDia(t.created_at));
+    encomendas.forEach((e) => somaDia(e.received_at));
+    checklist.forEach((c) => somaDia(`${c.entry_date}T00:00:00`));
+    const porDia = [...contagemPorDia.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dia, value]) => ({ label: dia.slice(8, 10) + '/' + dia.slice(5, 7), value }));
 
     const ehManutencao = (o: { origin_type: string }) =>
       o.origin_type === 'preventiva' || o.origin_type === 'inspecao';
@@ -141,6 +196,10 @@ export default function RelatoriosScreen() {
       tasksPending: tasks.filter((t) => t.status === 'pendente').length,
       maintenanceRecords: manutencoes.length,
       checklistDone: checklist.length,
+      deliveriesReceived: encomendas.length,
+      deliveriesDelivered: entregues.length,
+      deliveryAvgHours: horasMedias,
+      porDia,
       itemsByCategory: {
         'Ordens de Serviço': demais
           .map((o) => ({
@@ -154,6 +213,15 @@ export default function RelatoriosScreen() {
             title: t.title,
             status: t.status === 'concluida' ? 'Concluída' : 'Pendente',
             date: t.created_at,
+          }))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        Encomendas: encomendas
+          .map((e) => ({
+            title: [e.units?.label ?? 'Unidade removida', e.store].filter(Boolean).join(' • '),
+            status:
+              e.status === 'entregue' ? 'Entregue' : e.status === 'devolvida' ? 'Devolvida' : 'Na portaria',
+            date: e.received_at,
+            unitLabel: e.units?.label ?? undefined,
           }))
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
         Manutenções: manutencoes
@@ -201,10 +269,50 @@ export default function RelatoriosScreen() {
   const totalPending = data ? data.occurrencesOpen + data.tasksPending : 0;
   const total = totalExecuted + totalPending;
 
-  async function exportPdf() {
+  // O que o relatório montado mostra: só as categorias escolhidas, e —
+  // dentro de Encomendas — só o apartamento buscado.
+  const termoApto = apartamento.trim().toUpperCase();
+  function aplicarFiltros(cat: Categoria, itens: ReportItem[]) {
+    if (cat !== 'Encomendas' || !termoApto) return itens;
+    return itens.filter((i) => (i.unitLabel ?? '').toUpperCase().includes(termoApto));
+  }
+  const categoriasVisiveis = CATEGORY_ORDER.filter((c) => categorias.includes(c));
+  const itensFiltrados = data
+    ? categoriasVisiveis.map((c) => ({ categoria: c, itens: aplicarFiltros(c, data.itemsByCategory[c]) }))
+    : [];
+  const totalFiltrado = itensFiltrados.reduce((s, g) => s + g.itens.length, 0);
+  // Contagem real de itens, não a soma de status: "executado + pendente"
+  // ignora encomendas e rotina, e faria a opção "tudo do período"
+  // anunciar zero registros num período que tem oito.
+  const totalTodosItens = data
+    ? CATEGORY_ORDER.reduce((s, c) => s + data.itemsByCategory[c].length, 0)
+    : 0;
+
+  const descricaoFiltros = [
+    categoriasVisiveis.length === CATEGORY_ORDER.length ? 'Tudo' : categoriasVisiveis.join(', '),
+    PERIOD_LABEL[filter],
+    termoApto ? `Apto ${termoApto}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  async function exportPdf(somenteFiltrado: boolean) {
     if (!data) return;
+    setExportOpen(false);
     setExporting(true);
-    const html = buildReportHtml(PERIOD_LABEL[filter], condo, data, totalExecuted, totalPending, total);
+    const grupos = somenteFiltrado
+      ? itensFiltrados
+      : CATEGORY_ORDER.map((c) => ({ categoria: c, itens: data.itemsByCategory[c] }));
+    const html = buildReportHtml(
+      PERIOD_LABEL[filter],
+      condo,
+      data,
+      totalExecuted,
+      totalPending,
+      total,
+      grupos,
+      somenteFiltrado ? descricaoFiltros : `Tudo · ${PERIOD_LABEL[filter]}`
+    );
     try {
       if (Platform.OS === 'web') {
         const win = window.open('', '_blank');
@@ -233,7 +341,7 @@ export default function RelatoriosScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Relatórios</Text>
-        <Pressable style={styles.exportButton} onPress={exportPdf} disabled={exporting || !data}>
+        <Pressable style={styles.exportButton} onPress={() => setExportOpen(true)} disabled={exporting || !data}>
           <Text style={styles.exportButtonText}>{exporting ? 'Gerando...' : 'Exportar PDF'}</Text>
         </Pressable>
       </View>
@@ -275,46 +383,91 @@ export default function RelatoriosScreen() {
         ))}
       </View>
 
+      <Text style={styles.sectionTitle}>O que incluir</Text>
+      <View style={styles.filterRow}>
+        {CATEGORY_ORDER.map((cat) => {
+          const ativa = categorias.includes(cat);
+          return (
+            <Pressable
+              key={cat}
+              style={[styles.filterChip, ativa && styles.filterChipActive]}
+              onPress={() =>
+                setCategorias((atual) =>
+                  atual.includes(cat) ? atual.filter((c) => c !== cat) : [...atual, cat]
+                )
+              }
+            >
+              <Text style={[styles.filterChipText, ativa && styles.filterChipTextActive]}>{cat}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {categorias.includes('Encomendas') ? (
+        <TextField
+          label="Filtrar encomendas por apartamento (opcional)"
+          value={apartamento}
+          onChangeText={setApartamento}
+          placeholder="Ex.: A-31"
+        />
+      ) : null}
+
       {loading || !data ? (
         <Text style={styles.empty}>Carregando…</Text>
       ) : (
         <>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: colors.success }]}>{totalExecuted}</Text>
-              <Text style={styles.statLabel}>Executado</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: colors.warning }]}>{totalPending}</Text>
-              <Text style={styles.statLabel}>Pendente</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>{total}</Text>
-              <Text style={styles.statLabel}>Total</Text>
-            </View>
-          </View>
+          <Destaques
+            itens={[
+              { label: 'Registros no filtro', value: String(totalFiltrado), hint: descricaoFiltros },
+              { label: 'Executado', value: String(totalExecuted), color: colors.success, hint: 'No período' },
+              { label: 'Pendente', value: String(totalPending), color: colors.warning, hint: 'No período' },
+              ...(categorias.includes('Encomendas')
+                ? [
+                    {
+                      label: 'Na portaria',
+                      value: String(data.deliveriesReceived - data.deliveriesDelivered),
+                      color: colors.accent,
+                      hint: `${data.deliveriesReceived} recebidas`,
+                    },
+                    {
+                      label: 'Tempo até entregar',
+                      value:
+                        data.deliveryAvgHours == null
+                          ? '—'
+                          : data.deliveryAvgHours < 24
+                            ? `${Math.round(data.deliveryAvgHours)} h`
+                            : `${(data.deliveryAvgHours / 24).toFixed(1)} d`,
+                      hint: 'Média no período',
+                    },
+                  ]
+                : []),
+            ]}
+          />
 
-          <Text style={styles.sectionTitle}>Executado × pendente</Text>
-          <PieChart
+          <Text style={styles.sectionTitle}>Por categoria</Text>
+          <BarrasHorizontais
+            data={itensFiltrados.map((g) => ({
+              label: g.categoria,
+              value: g.itens.length,
+              color: CATEGORY_COR[g.categoria],
+            }))}
+            vazio="Nenhum conteúdo selecionado."
+          />
+
+          <Text style={styles.sectionTitle}>Situação</Text>
+          <BarrasHorizontais
             data={[
               { label: 'Executado', value: totalExecuted, color: colors.success },
               { label: 'Pendente', value: totalPending, color: colors.warning },
             ]}
           />
 
-          <Text style={styles.sectionTitle}>Por categoria</Text>
-          <BarChart
-            data={[
-              { label: 'Ordens de Serviço', value: data.occurrencesResolved + data.occurrencesOpen, color: colors.danger },
-              { label: 'Tarefas', value: data.tasksDone + data.tasksPending, color: colors.warning },
-              { label: 'Manutenções', value: data.maintenanceRecords, color: colors.primary },
-              { label: 'Rotina', value: data.checklistDone, color: colors.success },
-            ]}
-          />
+          <Text style={styles.sectionTitle}>Evolução no período</Text>
+          <EvolucaoNoTempo data={data.porDia} />
 
           <Text style={styles.sectionTitle}>Itens do período</Text>
-          {CATEGORY_ORDER.map((category) => {
-            const items = data.itemsByCategory[category];
+          {categoriasVisiveis.map((category) => {
+            const items = aplicarFiltros(category, data.itemsByCategory[category]);
             return (
               <View key={category} style={styles.categoryBlock}>
                 <Text style={styles.categoryTitle}>
@@ -343,6 +496,36 @@ export default function RelatoriosScreen() {
           })}
         </>
       )}
+
+      <AppModal visible={exportOpen} onClose={() => setExportOpen(false)}>
+        <ModalFormLayout style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Exportar PDF</Text>
+          <Text style={styles.exportHint}>
+            O relatório filtrado sai com o conteúdo escolhido e os filtros escritos no cabeçalho.
+          </Text>
+
+          <Pressable style={styles.exportOption} onPress={() => exportPdf(true)}>
+            <Text style={styles.exportOptionTitle}>Somente o que está filtrado</Text>
+            <Text style={styles.exportOptionHint}>
+              {descricaoFiltros} — {totalFiltrado} registro(s)
+            </Text>
+          </Pressable>
+
+          <Pressable style={styles.exportOption} onPress={() => exportPdf(false)}>
+            <Text style={styles.exportOptionTitle}>Tudo do período</Text>
+            <Text style={styles.exportOptionHint}>
+              Todas as categorias em {PERIOD_LABEL[filter].toLowerCase()} — {totalTodosItens} registro(s)
+            </Text>
+          </Pressable>
+
+          <Button
+            title="Cancelar"
+            variant="secondary"
+            onPress={() => setExportOpen(false)}
+            style={{ marginTop: spacing.md }}
+          />
+        </ModalFormLayout>
+      </AppModal>
 
       <CondoSettingsModal
         visible={condoFormOpen}
@@ -443,7 +626,9 @@ function buildReportHtml(
   data: ReportData,
   totalExecuted: number,
   totalPending: number,
-  total: number
+  total: number,
+  grupos: { categoria: Categoria; itens: ReportItem[] }[],
+  descricaoFiltros: string
 ) {
   const condoHeader = condo && (condo.name || condo.cnpj || condo.address || condo.phone || condo.administradora)
     ? `
@@ -461,8 +646,7 @@ function buildReportHtml(
     `
     : '<h1>Relatório do condomínio</h1>';
 
-  const categorySections = CATEGORY_ORDER.map((category) => {
-    const items = data.itemsByCategory[category];
+  const categorySections = grupos.map(({ categoria: category, itens: items }) => {
     const rows = items.length
       ? items
           .map(
@@ -507,6 +691,10 @@ function buildReportHtml(
       <body>
         ${condoHeader}
         <p class="period">Período do relatório: ${periodLabel}</p>
+        <!-- Sem isto, um PDF filtrado é indistinguível de um completo
+             que por acaso tinha poucos itens. -->
+        <p class="period"><strong>Conteúdo:</strong> ${escapeHtml(descricaoFiltros)}</p>
+        <p class="period">Emitido em ${new Date().toLocaleString('pt-BR')}</p>
         <div class="totals">
           <div><b style="color:${colors.success}">${totalExecuted}</b>Executado</div>
           <div><b style="color:${colors.warning}">${totalPending}</b>Pendente</div>
@@ -571,6 +759,28 @@ const styles = StyleSheet.create({
   itemTitle: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textPrimary },
   itemPerformedBy: { fontFamily: fontFamily.regular, fontSize: fontSize.xs, color: colors.textMuted, marginTop: 1 },
   itemStatus: { fontFamily: fontFamily.semibold, fontSize: fontSize.xs, color: colors.textSecondary },
+  exportHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+    lineHeight: 20,
+  },
+  exportOption: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  exportOptionTitle: { fontFamily: fontFamily.bold, fontSize: fontSize.base, color: colors.textPrimary },
+  exportOptionHint: {
+    fontFamily: fontFamily.regular,
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   modalContainer: { flexGrow: 1, padding: spacing.xl, paddingTop: 60, backgroundColor: colors.background },
   modalTitle: { fontFamily: fontFamily.extrabold, fontSize: fontSize.xl, marginBottom: spacing.lg, color: colors.textPrimary },
   error: { fontFamily: fontFamily.medium, color: colors.danger, marginTop: spacing.md, fontSize: fontSize.sm },
