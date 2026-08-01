@@ -87,6 +87,9 @@ export default function UnidadesScreen() {
       <FlatList
         data={filtradas}
         keyExtractor={(item) => item.id}
+        // O React Native não aceita mudar numColumns em tempo de
+        // execução: sem esta key, girar o aparelho derruba a tela.
+        key={isWeb ? 'grid-largo' : 'grid-estreito'}
         numColumns={isWeb ? 4 : 2}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={styles.listContent}

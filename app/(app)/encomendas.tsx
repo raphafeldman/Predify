@@ -74,6 +74,10 @@ export default function EncomendasScreen() {
   const [lojaFiltro, setLojaFiltro] = useState<string | null>(null);
   const [periodoDias, setPeriodoDias] = useState<number | null>(30);
   const [buscaUnidade, setBuscaUnidade] = useState('');
+  // Num celular, três linhas de chips empurram a primeira encomenda
+  // para fora da tela. Quem está na portaria quer ver o que está
+  // pendente ao abrir; o resto fica a um toque.
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   const isSindico = profile?.role === 'sindico';
 
@@ -127,6 +131,16 @@ export default function EncomendasScreen() {
   }, [encomendas, statusFiltro, lojaFiltro, periodoDias, buscaUnidade, unitById]);
 
   const pendentes = encomendas.filter((e) => e.status === 'recebida').length;
+
+  // Com os filtros recolhidos, o rótulo precisa dizer o que está em uso
+  // — senão a lista parece incompleta sem explicação.
+  const resumoFiltros = useMemo(() => {
+    const ativos: string[] = [];
+    if (lojaFiltro) ativos.push(lojaFiltro);
+    if (periodoDias !== 30) ativos.push(periodoDias ? `${periodoDias} dias` : 'Tudo');
+    if (buscaUnidade.trim()) ativos.push(buscaUnidade.trim().toUpperCase());
+    return ativos.length ? `Filtros: ${ativos.join(' · ')}` : 'Mais filtros';
+  }, [lojaFiltro, periodoDias, buscaUnidade]);
 
   async function devolver(enc: Delivery) {
     const motivo = 'Devolvida ao remetente';
@@ -199,21 +213,34 @@ export default function EncomendasScreen() {
               ))}
             </View>
 
-            <View style={styles.chipRow}>
-              {PERIODOS.map((p) => (
-                <Pressable
-                  key={p.label}
-                  style={[styles.chip, periodoDias === p.days && styles.chipAtivo]}
-                  onPress={() => setPeriodoDias(p.days)}
-                >
-                  <Text style={[styles.chipTexto, periodoDias === p.days && styles.chipTextoAtivo]}>
-                    {p.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <Pressable style={styles.filtrosToggle} onPress={() => setFiltrosAbertos((v) => !v)}>
+              <Ionicons
+                name={filtrosAbertos ? 'chevron-up' : 'options-outline'}
+                size={15}
+                color={colors.primary}
+              />
+              <Text style={styles.filtrosToggleTexto}>
+                {filtrosAbertos ? 'Menos filtros' : resumoFiltros}
+              </Text>
+            </Pressable>
 
-            {lojasUsadas.length > 0 ? (
+            {filtrosAbertos ? (
+              <View style={styles.chipRow}>
+                {PERIODOS.map((p) => (
+                  <Pressable
+                    key={p.label}
+                    style={[styles.chip, periodoDias === p.days && styles.chipAtivo]}
+                    onPress={() => setPeriodoDias(p.days)}
+                  >
+                    <Text style={[styles.chipTexto, periodoDias === p.days && styles.chipTextoAtivo]}>
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            {filtrosAbertos && lojasUsadas.length > 0 ? (
               <View style={styles.chipRow}>
                 <Pressable
                   style={[styles.chip, lojaFiltro === null && styles.chipAtivo]}
@@ -237,12 +264,14 @@ export default function EncomendasScreen() {
               </View>
             ) : null}
 
-            <TextField
-              label=""
-              value={buscaUnidade}
-              onChangeText={setBuscaUnidade}
-              placeholder="Filtrar por apartamento (ex.: A-302)"
-            />
+            {filtrosAbertos ? (
+              <TextField
+                label=""
+                value={buscaUnidade}
+                onChangeText={setBuscaUnidade}
+                placeholder="Filtrar por apartamento (ex.: A-302)"
+              />
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -573,6 +602,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   chipAtivo: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filtrosToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xs },
+  filtrosToggleTexto: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.primary },
   chipTexto: { fontFamily: fontFamily.semibold, fontSize: fontSize.sm, color: colors.textSecondary },
   chipTextoAtivo: { color: colors.textOnPrimary },
   linha: { fontFamily: fontFamily.regular, fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
