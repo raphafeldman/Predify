@@ -10,7 +10,7 @@ import { colors, layout } from '../../lib/theme';
 import { useIsWideScreen } from '../../lib/useIsWideScreen';
 
 export default function AppLayout() {
-  const { session, profile, isPlatformAdmin, loading } = useAuth();
+  const { session, profile, isPlatformAdmin, isSomenteAdminPlataforma, loading } = useAuth();
   const isWideScreen = useIsWideScreen();
 
   useEffect(() => {
@@ -53,7 +53,11 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: isPlatformAdmin ? 'Administração' : profile?.role === 'sindico' ? 'Painel' : 'Rotina',
+          title: isSomenteAdminPlataforma
+            ? 'Administração'
+            : profile?.role === 'sindico'
+              ? 'Painel'
+              : 'Rotina',
           tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
         }}
       />

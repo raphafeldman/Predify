@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, isPlatformAdmin, signOut } = useAuth();
+  const { profile, isPlatformAdmin, isSomenteAdminPlataforma, signOut } = useAuth();
 
   return (
     <View style={styles.container}>
@@ -46,7 +46,10 @@ export function Sidebar() {
       <View style={styles.nav}>
         {NAV_ITEMS.filter((item) => {
           if (item.adminOnly) return isPlatformAdmin;
-          if (isPlatformAdmin) return item.href === '/' || item.href === '/perfil';
+          // Só o operador puro da plataforma tem a navegação reduzida.
+          // Quem administra o produto E toca um condomínio precisa das
+          // duas coisas.
+          if (isSomenteAdminPlataforma) return item.href === '/' || item.href === '/perfil';
           return !item.sindicoOnly || profile?.role === 'sindico';
         }).map((item) => {
           const active = pathname === item.href;

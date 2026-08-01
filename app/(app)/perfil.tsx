@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/auth-context';
 import { colors, fontFamily, fontSize, radius, spacing } from '../../lib/theme';
 
 export default function PerfilScreen() {
-  const { profile, isPlatformAdmin, session, signOut } = useAuth();
+  const { profile, isPlatformAdmin, isSomenteAdminPlataforma, session, signOut } = useAuth();
   const router = useRouter();
 
   return (
@@ -18,14 +18,21 @@ export default function PerfilScreen() {
 
       <Card style={styles.card}>
         <Text style={styles.name}>{profile?.full_name ?? (isPlatformAdmin ? 'Administrador da plataforma' : '—')}</Text>
+        {/* Os dois papéis convivem: dizer só "admin" escondia que a
+            conta também é síndica de um condomínio. */}
         <Text style={styles.role}>
-          {isPlatformAdmin ? 'Admin da plataforma' : profile?.role === 'sindico' ? 'Síndico' : 'Funcionário'}
+          {[
+            profile?.condominio_id ? (profile.role === 'sindico' ? 'Síndico' : 'Funcionário') : null,
+            isPlatformAdmin ? 'Admin da plataforma' : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || '—'}
         </Text>
         <Text style={styles.detail}>{session?.user.email}</Text>
         {profile?.phone ? <Text style={styles.detail}>{profile.phone}</Text> : null}
       </Card>
 
-      {!isPlatformAdmin && (
+      {!isSomenteAdminPlataforma && (
         <>
           <Pressable style={styles.linkRow} onPress={() => router.push('/mensagens')}>
             <Ionicons name="notifications-outline" size={18} color={colors.textSecondary} />

@@ -7,6 +7,18 @@ interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
   isPlatformAdmin: boolean;
+  /**
+   * Administrador da plataforma que NÃO pertence a nenhum condomínio —
+   * o operador puro do produto, para quem o app é só o painel de
+   * administração.
+   *
+   * Ser admin não implica isso: um síndico pode administrar a plataforma
+   * e continuar tocando o próprio condomínio. Enquanto essa distinção não
+   * existia, a conta de admin perdia acesso a todas as funções de
+   * condomínio — Encomendas, Documentos, Equipamentos — e a única saída
+   * era manter duas contas.
+   */
+  isSomenteAdminPlataforma: boolean;
   loading: boolean;
   blockedMessage: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -117,7 +129,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, isPlatformAdmin, loading, blockedMessage, signIn, signOut, refreshProfile }}
+      value={{
+        session,
+        profile,
+        isPlatformAdmin,
+        isSomenteAdminPlataforma: isPlatformAdmin && !profile?.condominio_id,
+        loading,
+        blockedMessage,
+        signIn,
+        signOut,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

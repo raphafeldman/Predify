@@ -75,9 +75,11 @@ function periodStartIso(period: VisaoGeralPeriod) {
 }
 
 export default function HomeScreen() {
-  const { profile, isPlatformAdmin } = useAuth();
+  const { profile, isSomenteAdminPlataforma } = useAuth();
 
-  if (isPlatformAdmin) return <AdminPanel />;
+  // Quem administra a plataforma e também tem condomínio vê o painel do
+  // próprio condomínio; a Administração fica acessível pelo menu.
+  if (isSomenteAdminPlataforma) return <AdminPanel />;
   if (!profile) return null;
 
   return profile.role === 'sindico' ? <SindicoHome /> : <FuncionarioHome />;
